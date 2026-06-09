@@ -6,10 +6,8 @@ MARKETPLACE_REF="${FACTOR_MINING_DEMO_REF:-main}"
 MARKETPLACE_NAME="${FACTOR_MINING_DEMO_MARKETPLACE:-factor-mining-demo-marketplace}"
 PLUGIN_NAME="${FACTOR_MINING_DEMO_PLUGIN:-factor-mining-demo}"
 START_MODE="${FACTOR_MINING_DEMO_START_MODE:-cli}"
-SKIP_SETUP="${FACTOR_MINING_DEMO_SKIP_SETUP:-0}"
-FORCE_SETUP="${FACTOR_MINING_DEMO_FORCE_SETUP:-0}"
 WORKSPACE_PATH="${FACTOR_MINING_DEMO_WORKSPACE:-.}"
-CODEX_PROMPT="${FACTOR_MINING_DEMO_PROMPT:-Use the Factor Mining Demo plugin. Verify Factor Mining status, then show me the Factor Mining public task list. Do not create a session until I choose a public task or provide a custom idea. Then write a valid plugin.py locally, upload it, wait for the backtest, fetch the default factor card if available, and summarize the result. If I need to use a different vt_ Agent API Key, run python3 scripts/factor_setup.py --browser and do not ask me to paste the key into chat.}"
+CODEX_PROMPT="${FACTOR_MINING_DEMO_PROMPT:-Use Factor Mining Demo. Start with factor_mining_demo_status. If setup is required, use factor_mining_demo_setup_browser and tell me to enter the key in the local browser page. Then show me the public task list and wait for me to choose a task or provide a custom idea.}"
 
 if [[ "${FACTOR_MINING_DEMO_START_CODEX:-1}" == "0" ]]; then
   START_MODE="none"
@@ -20,16 +18,12 @@ usage() {
 Usage: install-codex.sh [options]
 
 Options:
-  --desktop       Install and configure, then open Codex Desktop for this workspace.
-  --no-start      Install and configure without starting Codex.
-  --install-only  Install the demo plugin without configuring Factor Mining or starting Codex.
-  --setup-only    Install the demo plugin and run Factor Mining setup without starting Codex.
-  --force-setup   Run setup even if the demo is already configured.
-  --skip-setup    Install and start without configuring Factor Mining.
+  --desktop       Install, then open Codex Desktop for this workspace.
+  --no-start      Install without starting Codex.
+  --install-only  Install without starting Codex.
   -h, --help      Show this help.
 
-Inside an existing Codex session, switch Agent API Keys with:
-  python3 scripts/factor_setup.py --browser
+Key setup is handled by the Factor Mining Demo MCP tools after install.
 USAGE
 }
 
@@ -38,22 +32,8 @@ while [[ $# -gt 0 ]]; do
     --desktop)
       START_MODE="desktop"
       ;;
-    --no-start)
+    --no-start|--install-only)
       START_MODE="none"
-      ;;
-    --install-only)
-      START_MODE="none"
-      SKIP_SETUP="1"
-      ;;
-    --setup-only)
-      START_MODE="none"
-      FORCE_SETUP="1"
-      ;;
-    --force-setup)
-      FORCE_SETUP="1"
-      ;;
-    --skip-setup)
-      SKIP_SETUP="1"
       ;;
     -h|--help)
       usage
@@ -69,7 +49,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if ! command -v codex >/dev/null 2>&1; then
-  echo "Codex CLI is required. Install or update Codex, then run this script again." >&2
+  echo "Codex CLI is required. Install or update Codex, then run this installer again." >&2
   exit 1
 fi
 
@@ -98,46 +78,6 @@ plugin_root() {
   fi
 }
 
-prompt_agent_key() {
-  local key
-  if [[ -n "${FACTOR_MINING_AGENT_API_KEY:-}" ]]; then
-    printf '%s\n' "${FACTOR_MINING_AGENT_API_KEY}"
-    return
-  fi
-  if [[ ! -r /dev/tty ]]; then
-    echo "A terminal is required to enter the Factor Mining Agent API Key securely." >&2
-    echo "Run this script from an interactive terminal, or set FACTOR_MINING_DEMO_SKIP_SETUP=1 and configure setup later." >&2
-    exit 1
-  fi
-  printf 'Paste Factor Mining Agent API Key (input hidden): ' >/dev/tty
-  IFS= read -r -s key </dev/tty
-  printf '\n' >/dev/tty
-  if [[ -z "${key}" ]]; then
-    echo "A Factor Mining Agent API Key is required for setup." >&2
-    exit 1
-  fi
-  printf '%s\n' "${key}"
-}
-
-configure_factor_mining() {
-  local root="$1"
-  if [[ "${SKIP_SETUP}" == "1" ]]; then
-    echo "Skipping Factor Mining setup because FACTOR_MINING_DEMO_SKIP_SETUP=1."
-    return
-  fi
-  if [[ "${FORCE_SETUP}" != "1" ]] && python3 "${root}/scripts/factor_status.py" >/dev/null 2>&1; then
-    echo "Factor Mining Demo is already configured."
-    return
-  fi
-
-  echo "Configuring Factor Mining Agent API access."
-  echo "Paste the vt_ Agent API Key at the next prompt. It is hidden, not passed as a command argument, and not sent to Codex chat."
-  local agent_key
-  agent_key="$(prompt_agent_key)"
-  printf '%s\n' "${agent_key}" | python3 "${root}/scripts/factor_setup.py" --api-key-stdin
-  unset agent_key
-}
-
 echo "Configuring Codex marketplace: ${MARKETPLACE_NAME}"
 if marketplace_configured; then
   echo "Marketplace already configured; refreshing if it is Git-backed."
@@ -163,7 +103,10 @@ if [[ -z "${PLUGIN_ROOT}" || ! -d "${PLUGIN_ROOT}" ]]; then
   exit 1
 fi
 
-configure_factor_mining "${PLUGIN_ROOT}"
+if [[ ! -f "${PLUGIN_ROOT}/.mcp.json" ]]; then
+  echo "Installed plugin is missing .mcp.json." >&2
+  exit 1
+fi
 
 if [[ "${START_MODE}" == "none" ]]; then
   echo "Codex plugin is installed. Start it with:"

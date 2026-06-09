@@ -9,6 +9,9 @@ from .metadata import PluginMetadata
 from .redaction import redact_text
 
 
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
+
 class ApiError(RuntimeError):
     def __init__(
         self,
@@ -45,6 +48,19 @@ class ApiError(RuntimeError):
 
 class AgentStatusError(ApiError):
     pass
+
+
+class NoRedirectHandler(request.HTTPRedirectHandler):
+    def redirect_request(self, req: request.Request, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+        return None
+
+    def http_error_301(self, req: request.Request, fp: Any, code: int, msg: str, headers: Any) -> Any:
+        fp.status = code
+        fp.code = code
+        fp.headers = headers
+        return fp
+
+    http_error_302 = http_error_303 = http_error_307 = http_error_308 = http_error_301
 
 
 AGENT_KEY_GUIDANCE = (
@@ -84,6 +100,7 @@ class ApiClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.opener = opener or request.build_opener()
+        self.no_redirect_opener = request.build_opener(NoRedirectHandler())
         self.timeout = timeout
 
     def _url(self, path: str, query: Mapping[str, Any] | None = None) -> str:
@@ -187,6 +204,108 @@ class ApiClient:
                 status=int(status),
                 method=method,
                 url=req.full_url,
+                body=payload,
+                api_key=self.api_key,
+            )
+        return payload
+
+    def _request_artifact_with_redirect_handling(self, path: str) -> Any:
+        req = self._make_request("GET", path)
+        try:
+            with self.no_redirect_opener.open(req, timeout=self.timeout) as response:
+                status = int(getattr(response, "status", getattr(response, "code", 0)) or 0)
+                if status == 200:
+                    return self._decode(response)
+                if status in REDIRECT_STATUSES:
+                    location = response.headers.get("Location")
+                    if not location:
+                        raise ApiError(
+                            "Factor Mining artifact redirect did not include a Location header",
+                            status=status,
+                            method="GET",
+                            url=req.full_url,
+                            api_key=self.api_key,
+                        )
+                    return self._follow_artifact_location(req.full_url, location)
+                payload = self._decode(response)
+        except HTTPError as exc:
+            if exc.code in REDIRECT_STATUSES:
+                location = exc.headers.get("Location")
+                if not location:
+                    raise ApiError(
+                        "Factor Mining artifact redirect did not include a Location header",
+                        status=exc.code,
+                        method="GET",
+                        url=req.full_url,
+                        api_key=self.api_key,
+                    ) from exc
+                return self._follow_artifact_location(req.full_url, location)
+            payload = self._decode(exc)
+            raise ApiError(
+                "Factor Mining artifact request failed",
+                status=exc.code,
+                method="GET",
+                url=req.full_url,
+                body=payload,
+                api_key=self.api_key,
+            ) from exc
+        except URLError as exc:
+            raise ApiError(
+                f"Factor Mining artifact request could not connect: {exc.reason}",
+                method="GET",
+                url=req.full_url,
+                api_key=self.api_key,
+            ) from exc
+
+        if status >= 400:
+            raise ApiError(
+                "Factor Mining artifact request failed",
+                status=status,
+                method="GET",
+                url=req.full_url,
+                body=payload,
+                api_key=self.api_key,
+            )
+        if status in REDIRECT_STATUSES:
+            raise ApiError(
+                "Factor Mining artifact redirect was not handled",
+                status=status,
+                method="GET",
+                url=req.full_url,
+                api_key=self.api_key,
+            )
+        return payload
+
+    def _follow_artifact_location(self, original_url: str, location: str) -> Any:
+        target_url = parse.urljoin(original_url, location)
+        req = request.Request(target_url, method="GET")
+        try:
+            with request.urlopen(req, timeout=self.timeout) as response:
+                payload = self._decode(response)
+                status = int(getattr(response, "status", getattr(response, "code", 0)) or 0)
+        except HTTPError as exc:
+            payload = self._decode(exc)
+            raise ApiError(
+                "Factor Mining artifact redirected request failed",
+                status=exc.code,
+                method="GET",
+                url=_artifact_error_url(target_url),
+                body=payload,
+                api_key=self.api_key,
+            ) from exc
+        except URLError as exc:
+            raise ApiError(
+                f"Factor Mining artifact redirected request could not connect: {exc.reason}",
+                method="GET",
+                url=_artifact_error_url(target_url),
+                api_key=self.api_key,
+            ) from exc
+        if status >= 400:
+            raise ApiError(
+                "Factor Mining artifact redirected request failed",
+                status=status,
+                method="GET",
+                url=_artifact_error_url(target_url),
                 body=payload,
                 api_key=self.api_key,
             )
@@ -334,9 +453,8 @@ class ApiClient:
         return self.request("GET", f"/jobs/{parse.quote(job_id, safe='')}")
 
     def artifact(self, job_id: str, name: str = "default_factor_card.json") -> Any:
-        return self.request(
-            "GET",
-            f"/jobs/{parse.quote(job_id, safe='')}/files/{parse.quote(name, safe='')}",
+        return self._request_artifact_with_redirect_handling(
+            f"/jobs/{parse.quote(job_id, safe='')}/files/{parse.quote(name, safe='')}"
         )
 
 
@@ -371,3 +489,10 @@ def encode_multipart_form(
         )
     chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
     return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def _artifact_error_url(url: str) -> str:
+    parsed = parse.urlsplit(url)
+    if not parsed.scheme or not parsed.netloc:
+        return url
+    return parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))

@@ -1,130 +1,98 @@
 # Factor Mining Demo
 
-Demo Codex plugin for the direct Factor Mining Agent API Key flow.
+Factor Mining Demo is a direct vt_ Agent API Key plugin for Codex, Claude Code,
+and OpenClaw. All three platforms use the same bundled Factor Mining Demo MCP
+server from `plugins/factor-mining-demo`.
 
-This repository shows the direct local demo workflow:
+The product surface is the MCP tool set:
 
-1. Install the Codex plugin.
-2. Enter a `vt_` Factor Mining Agent API Key locally.
-3. Ask Codex to start from a public task or a custom factor idea.
-4. Let Codex write `plugin.py`, upload it, run the backtest, fetch the factor card, and summarize the result.
+- `factor_mining_demo_status`
+- `factor_mining_demo_setup_browser`
+- `factor_mining_demo_list_public_tasks`
+- `factor_mining_demo_create_task_session`
+- `factor_mining_demo_create_custom_session`
+- `factor_mining_demo_parse_plugin_metadata`
+- `factor_mining_demo_request_dedup_context`
+- `factor_mining_demo_upload_backtest_wait`
+- `factor_mining_demo_resume_run`
+- `factor_mining_demo_get_workflow`
+- `factor_mining_demo_get_job`
+- `factor_mining_demo_get_artifact`
+- `factor_mining_demo_clear_config`
 
-The key is entered through a hidden terminal prompt or local browser setup page.
-Do not paste the key into Codex chat.
+Key entry happens through the local browser setup page returned by the MCP
+tool, or by a secure local prompt controlled by the MCP host. Never paste the
+key into chat.
 
-## Install With Codex CLI
+## Codex CLI
 
-Run:
+```bash
+codex plugin marketplace add varsity-tech-product/factor-mining-demo --ref main
+codex plugin add factor-mining-demo@factor-mining-demo-marketplace
+```
+
+Or run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-codex.sh | bash
 ```
 
-The installer adds the marketplace, installs the plugin, asks for the `vt_`
-Agent API Key locally, validates it with Factor Mining, and starts Codex with a
-demo workflow prompt.
+## Codex Desktop
 
-To install without starting Codex:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-codex.sh | FACTOR_MINING_DEMO_START_CODEX=0 bash
-```
-
-## Manual CLI Install
-
-```bash
-codex plugin marketplace add varsity-tech-product/factor-mining-demo --ref main
-codex plugin add factor-mining-demo@factor-mining-demo-marketplace
-PLUGIN_ROOT="$(find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/factor-mining-demo-marketplace/factor-mining-demo" -mindepth 1 -maxdepth 1 -type d -print | sort | tail -n 1)" && python3 "$PLUGIN_ROOT/scripts/factor_setup.py" && codex "Use the Factor Mining Demo plugin. Verify Factor Mining status, then show me the Factor Mining public task list. Do not create a session until I choose a public task or provide a custom idea. Then write a valid plugin.py locally, upload it, wait for the backtest, fetch the default factor card if available, and summarize the result."
-```
-
-## Codex Desktop Install
-
-In Codex Desktop, add this marketplace:
-
-- Source: `varsity-tech-product/factor-mining-demo`
-- Git ref: `main`
-- Sparse paths: leave empty
-
-Then install `Factor Mining Demo` from the marketplace.
-
-To configure the `vt_` Agent API Key before opening Desktop:
-
-```bash
-codex plugin marketplace add varsity-tech-product/factor-mining-demo --ref main
-codex plugin add factor-mining-demo@factor-mining-demo-marketplace
-PLUGIN_ROOT="$(find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/factor-mining-demo-marketplace/factor-mining-demo" -mindepth 1 -maxdepth 1 -type d -print | sort | tail -n 1)" && python3 "$PLUGIN_ROOT/scripts/factor_setup.py"
-```
-
-Open Codex Desktop and start a new chat with:
+Use these fields in Codex Desktop:
 
 ```text
-Use the Factor Mining Demo plugin. Verify Factor Mining status, then show me the Factor Mining public task list. Do not create a session until I choose a public task or provide a custom idea. Then write a valid plugin.py locally, upload it, wait for the backtest, fetch the default factor card if available, and summarize the result.
+Source: varsity-tech-product/factor-mining-demo
+Git ref: main
+Plugin: factor-mining-demo@factor-mining-demo-marketplace
 ```
 
-## Claude Code And OpenClaw
+You can also run:
 
-Codex is the original demo path. The Claude Code bundle under
-`adapters/claude-code/factor-mining-demo` adds Claude Code support and is also
-the OpenClaw-compatible bundle that OpenClaw can install from the marketplace.
-All paths use the same direct `vt_` Agent API Key workflow.
+```bash
+./install-codex-desktop.sh
+```
 
-Install with Claude Code:
+## Claude Code
 
 ```bash
 claude plugin marketplace add varsity-tech-product/factor-mining-demo@main
 claude plugin install factor-mining-demo@factor-mining-demo-marketplace
 ```
 
-Recommended one-command OpenClaw install:
+## OpenClaw
+
+OpenClaw uses the Claude-compatible bundle from the same plugin package.
+OpenClaw CLI, model settings, and auth must already be configured.
+
+Recommended install:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-openclaw.sh | bash
 ```
 
-Prerequisites:
-
-- OpenClaw CLI installed.
-- OpenClaw model/auth already configured.
-- The installer sets up the OpenClaw gateway service, local node host service,
-  and `factormining` agent where possible.
-- Enter the `vt_` key only through the hidden prompt or local browser setup
-  page. Do not paste the key into chat.
-
-Manual OpenClaw bundle install:
+Manual bundle install:
 
 ```bash
 openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo --force
 ```
 
-This command only installs the bundle and is for manual install flows where the
-gateway, paired local node host, Factor Mining-capable agent, skill allowlist,
-and local file/command tool policy are already configured.
+OpenClaw may display provider-prefixed tool names such as
+`fm-demo__factor_mining_demo_status`; use the Factor Mining Demo MCP tools shown
+above.
 
-## Switch Keys
+## First Prompts
 
-Inside an active Codex CLI or Codex Desktop session, ask Codex to run:
-
-```bash
-python3 scripts/factor_setup.py --browser
+```text
+Use Factor Mining Demo. Verify status, then show me the public task list.
+Use Factor Mining Demo with my custom factor idea.
+Use Factor Mining Demo to resume my run and summarize results.
 ```
-
-The setup page opens on `127.0.0.1`. Paste the `vt_` Agent API Key into that
-local page, not into chat.
 
 ## Local State
 
-Configuration is stored at:
-
-```text
-~/.factor-mining-demo/config.json
-```
-
-Run state is stored at:
-
-```text
-~/.factor-mining-demo/runs/
-```
+Configuration is stored under `~/.factor-mining-demo/`. Run state is stored
+under `~/.factor-mining-demo/runs/`.
 
 ## License
 

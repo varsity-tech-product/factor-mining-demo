@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import filecmp
 import json
-import os
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_ROOT = ROOT / "scripts"
-CLAUDE_ADAPTER = ROOT / "adapters" / "claude-code" / "factor-mining-demo"
-OPENCLAW_ADAPTER_ROOT = ROOT / "adapters" / "openclaw"
-OTHER_NATIVE_ADAPTER_ROOTS = [
-    ROOT / "adapters" / ("open" + "code"),
-    ROOT / "adapters" / ("Open" + "Code"),
-    ROOT / "adapters" / ("open" + "-code"),
-]
-CLAUDE_BIN_WRAPPERS = [
-    "factor-mining-demo-setup",
-    "factor-mining-demo-browser-setup",
-    "factor-mining-demo-status",
-    "factor-mining-demo-api",
-    "factor-mining-demo-upload-backtest",
-]
+PLUGIN = ROOT / "plugins" / "factor-mining-demo"
+MCP_ROOT = PLUGIN / "mcp"
+REQUIRED_TOOLS = {
+    "factor_mining_demo_status",
+    "factor_mining_demo_setup_browser",
+    "factor_mining_demo_list_public_tasks",
+    "factor_mining_demo_create_task_session",
+    "factor_mining_demo_create_custom_session",
+    "factor_mining_demo_parse_plugin_metadata",
+    "factor_mining_demo_request_dedup_context",
+    "factor_mining_demo_upload_backtest_wait",
+    "factor_mining_demo_resume_run",
+    "factor_mining_demo_get_workflow",
+    "factor_mining_demo_get_job",
+    "factor_mining_demo_get_artifact",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -40,85 +40,49 @@ def require_absent(path: Path) -> None:
         raise AssertionError(f"unexpected path: {path.relative_to(ROOT)}")
 
 
-def require_executable(path: Path) -> None:
-    require(path)
-    if not os.access(path, os.X_OK):
-        raise AssertionError(f"path is not executable: {path.relative_to(ROOT)}")
-
-
-def require_text(path: Path, needle: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    if needle not in text:
-        raise AssertionError(f"missing text in {path.relative_to(ROOT)}: {needle}")
-
-
-def require_no_text(path: Path, needle: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    if needle in text:
-        raise AssertionError(f"unexpected text in {path.relative_to(ROOT)}: {needle}")
-
-
-def compare_scripts(adapter: Path) -> None:
-    target = adapter / "scripts"
-    require(target)
-    source_files = sorted(path.relative_to(SCRIPT_ROOT) for path in SCRIPT_ROOT.rglob("*") if path.is_file())
-    target_files = sorted(path.relative_to(target) for path in target.rglob("*") if path.is_file())
-    ignored_suffixes = {".pyc"}
-    source_files = [path for path in source_files if path.suffix not in ignored_suffixes and "__pycache__" not in path.parts]
-    target_files = [path for path in target_files if path.suffix not in ignored_suffixes and "__pycache__" not in path.parts]
-    if source_files != target_files:
-        raise AssertionError(f"script file list mismatch for {adapter.relative_to(ROOT)}")
-    for rel in source_files:
-        if not filecmp.cmp(SCRIPT_ROOT / rel, target / rel, shallow=False):
-            raise AssertionError(f"script differs: {adapter.relative_to(ROOT)}/scripts/{rel}")
-
-
 def main() -> None:
+    require(ROOT / ".agents" / "plugins" / "marketplace.json")
+    require(ROOT / ".claude-plugin" / "marketplace.json")
+    require(PLUGIN / ".codex-plugin" / "plugin.json")
+    require(PLUGIN / ".claude-plugin" / "plugin.json")
+    require(PLUGIN / ".mcp.json")
+    require(PLUGIN / "skills" / "factor-mining-demo" / "SKILL.md")
+    require(MCP_ROOT / "server.py")
+
+    require_absent(ROOT / ".codex-plugin")
+    require_absent(ROOT / "scripts")
+    require_absent(ROOT / "skills")
+    require_absent(ROOT / "adapters" / "claude-code" / "factor-mining-demo" / "bin")
+    require_absent(MCP_ROOT / "factor_mining_agent_lib" / "cli.py")
+
+    codex_marketplace = load_json(ROOT / ".agents" / "plugins" / "marketplace.json")
+    codex_entry = codex_marketplace["plugins"][0]
+    assert codex_entry["name"] == "factor-mining-demo"
+    assert codex_entry["source"] == {"source": "local", "path": "./plugins/factor-mining-demo"}
+
     claude_marketplace = load_json(ROOT / ".claude-plugin" / "marketplace.json")
-    assert claude_marketplace["name"] == "factor-mining-demo-marketplace"
-    assert claude_marketplace["owner"]["name"] == "Varsity Tech Product"
-    assert claude_marketplace["plugins"][0]["source"] == "./adapters/claude-code/factor-mining-demo"
+    claude_entry = claude_marketplace["plugins"][0]
+    assert claude_entry["name"] == "factor-mining-demo"
+    assert claude_entry["source"] == "./plugins/factor-mining-demo"
 
-    claude_plugin = load_json(ROOT / "adapters" / "claude-code" / "factor-mining-demo" / ".claude-plugin" / "plugin.json")
-    assert claude_plugin["name"] == "factor-mining-demo"
+    codex_plugin = load_json(PLUGIN / ".codex-plugin" / "plugin.json")
+    assert codex_plugin["skills"] == "./skills/"
+    assert codex_plugin["mcpServers"] == "./.mcp.json"
 
-    require_absent(OPENCLAW_ADAPTER_ROOT)
-    for adapter_root in OTHER_NATIVE_ADAPTER_ROOTS:
-        require_absent(adapter_root)
-    require(CLAUDE_ADAPTER / "README.md")
-    require(CLAUDE_ADAPTER / "skills" / "factor-mining-demo" / "SKILL.md")
-    compare_scripts(CLAUDE_ADAPTER)
+    mcp = load_json(PLUGIN / ".mcp.json")
+    server = mcp["mcpServers"]["fm-demo"]
+    assert server["command"] == "/bin/zsh"
+    assert server["cwd"] == "."
+    assert server["args"] == ["-lc", "exec python3 ./mcp/server.py"]
 
-    for wrapper in CLAUDE_BIN_WRAPPERS:
-        require_executable(CLAUDE_ADAPTER / "bin" / wrapper)
+    sys.path.insert(0, str(MCP_ROOT))
+    import server as mcp_server
 
-    skill = CLAUDE_ADAPTER / "skills" / "factor-mining-demo" / "SKILL.md"
-    for wrapper in CLAUDE_BIN_WRAPPERS:
-        require_text(skill, wrapper)
-    require_no_text(skill, "python3 scripts/")
+    missing = REQUIRED_TOOLS.difference(mcp_server.list_tool_names())
+    if missing:
+        raise AssertionError(f"missing MCP tools: {sorted(missing)}")
 
-    readme = ROOT / "README.md"
-    installer = ROOT / "install-openclaw.sh"
-    require_executable(installer)
-    require_text(installer, "plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo --force")
-    require_text(installer, 'AGENT_ID="factormining"')
-    require_text(installer, "skills check --agent")
-    require_text(installer, "normalize_path")
-    require_text(installer, "Path(sys.argv[1].strip()).expanduser()")
-
-    require_text(readme, "Claude Code And OpenClaw")
-    require_text(readme, "curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-openclaw.sh | bash")
-    require_text(readme, "only installs the bundle")
-    require_text(readme, "manual install")
-    require_text(readme, "vt_")
-    require_text(readme, "Do not paste the key into chat")
-    require_text(readme, "openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo --force")
-    require_no_text(readme, "After installing the plugin, run or start OpenClaw normally")
-    require_no_text(readme, "openclaw plugins install " + "./adapters/openclaw/factor-mining-demo")
-    require_no_text(readme, "feat/" + "claude-openclaw-adapters")
-    require_no_text(readme, "After this branch is " + "merged to main")
-
-    print("adapter validation passed")
+    print("packaging validation passed")
 
 
 if __name__ == "__main__":

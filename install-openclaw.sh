@@ -7,7 +7,20 @@ AGENT_NAME="factormining"
 WORKSPACE_DIR="${FACTOR_MINING_DEMO_WORKSPACE:-${HOME}/.openclaw/workspaces/factor-mining-agent}"
 AGENT_DIR="${FACTOR_MINING_DEMO_AGENT_DIR:-${HOME}/.openclaw/agents/factor-mining}"
 SET_DEFAULT="${FACTOR_MINING_DEMO_SET_DEFAULT:-1}"
-STATUS_HELPER="${HOME}/.openclaw/extensions/${PLUGIN_ID}/bin/factor-mining-demo-status"
+REQUIRED_MCP_TOOLS=(
+  factor_mining_demo_status
+  factor_mining_demo_setup_browser
+  factor_mining_demo_list_public_tasks
+  factor_mining_demo_create_task_session
+  factor_mining_demo_create_custom_session
+  factor_mining_demo_parse_plugin_metadata
+  factor_mining_demo_request_dedup_context
+  factor_mining_demo_upload_backtest_wait
+  factor_mining_demo_resume_run
+  factor_mining_demo_get_workflow
+  factor_mining_demo_get_job
+  factor_mining_demo_get_artifact
+)
 
 log() {
   printf '==> %s\n' "$*"
@@ -186,10 +199,8 @@ required_local_capabilities = {
 required_blockers = required_local_capabilities | {"group:fs", "group:runtime", "group:web"}
 
 if config_path.exists():
-    original_text = config_path.read_text(encoding="utf-8")
-    config = json.loads(original_text)
+    config = json.loads(config_path.read_text(encoding="utf-8"))
 else:
-    original_text = "{}\n"
     config = {}
 
 if not isinstance(config, dict):
@@ -287,7 +298,7 @@ PY
 
 verify_skills() {
   local skills_text skills_json
-  log "Verifying Factor Mining skill visibility"
+  log "Verifying Factor Mining Demo skill visibility"
   skills_text="$("${OPENCLAW_BIN}" skills check --agent "${AGENT_ID}" 2>&1)" || {
     printf '%s\n' "${skills_text}" >&2
     fail "OpenClaw skills check failed for agent ${AGENT_ID}."
@@ -330,27 +341,106 @@ verify_nodes() {
   fi
 }
 
-verify_status_helper() {
-  local output exit_code
-  log "Verifying Factor Mining status helper"
-  if [[ ! -x "${STATUS_HELPER}" ]]; then
-    fail "Missing installed status helper: ${STATUS_HELPER}"
-  fi
+tools_in_payload() {
+  local payload="$1"
+  REQUIRED_TOOLS_JSON="$(printf '%s\n' "${REQUIRED_MCP_TOOLS[@]}" | python3 -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')" \
+  PAYLOAD="${payload}" python3 <<'PY'
+import json
+import os
+import sys
 
-  set +e
-  output="$("${STATUS_HELPER}" 2>&1)"
-  exit_code=$?
-  set -e
+required = json.loads(os.environ["REQUIRED_TOOLS_JSON"])
+payload = os.environ.get("PAYLOAD") or ""
+
+def names(value):
+    found = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"name", "toolName", "id"} and isinstance(item, str):
+                found.add(item)
+            found.update(names(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.update(names(item))
+    return found
+
+try:
+    parsed = json.loads(payload)
+except Exception:
+    parsed = payload
+
+if isinstance(parsed, str):
+    visible = set()
+    for tool in required:
+        if tool in parsed:
+            visible.add(tool)
+else:
+    raw_names = names(parsed)
+    visible = {
+        tool
+        for tool in required
+        if tool in raw_names or any(name.endswith("__" + tool) for name in raw_names)
+    }
+
+missing = [tool for tool in required if tool not in visible]
+if missing:
+    print("missing=" + ",".join(missing))
+    raise SystemExit(1)
+print("all_required_mcp_tools_visible=true")
+PY
+}
+
+verify_mcp_tools() {
+  local output inspect_json plugin_root server_json probe_json
+
+  log "Verifying installed OpenClaw plugin bundle"
+  output="$("${OPENCLAW_BIN}" plugins inspect "${PLUGIN_ID}" 2>&1)" || {
+    printf '%s\n' "${output}" >&2
+    fail "OpenClaw plugin inspect failed for ${PLUGIN_ID}."
+  }
   printf '%s\n' "${output}"
+  if ! printf '%s\n' "${output}" | grep -Eiq 'mcp|bundle|factor_mining_demo_status'; then
+    warn "Plugin inspect output did not show MCP details. Continuing to tool visibility checks."
+  fi
 
-  if [[ "${exit_code}" -eq 0 ]]; then
-    return
-  fi
-  if [[ "${output}" == *"Missing Factor Mining config"* && "${output}" == *"Run setup first."* ]]; then
-    log "Status helper is installed; Factor Mining key setup is still required"
-    return
-  fi
-  fail "Factor Mining status helper failed unexpectedly."
+  inspect_json="$("${OPENCLAW_BIN}" plugins inspect "${PLUGIN_ID}" --json --runtime 2>/dev/null)" || {
+    fail "OpenClaw plugin inspect JSON output failed for ${PLUGIN_ID}."
+  }
+  plugin_root="$(INSPECT_JSON="${inspect_json}" python3 <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["INSPECT_JSON"])
+plugin = payload.get("plugin") or {}
+if plugin.get("format") != "bundle":
+    raise SystemExit("installed plugin is not a bundle")
+if "mcpServers" not in set(payload.get("bundleCapabilities") or plugin.get("bundleCapabilities") or []):
+    raise SystemExit("installed bundle does not report mcpServers capability")
+root = plugin.get("rootDir") or plugin.get("source")
+if not root:
+    raise SystemExit("installed bundle root was not reported")
+print(root)
+PY
+  )" || fail "OpenClaw plugin bundle metadata did not include the expected MCP capability."
+
+  server_json="$(PLUGIN_ROOT="${plugin_root}" python3 <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "command": "/bin/zsh",
+    "cwd": os.environ["PLUGIN_ROOT"],
+    "args": ["-lc", "exec python3 ./mcp/server.py"],
+}))
+PY
+  )"
+  log "Configuring OpenClaw MCP startup for fm-demo"
+  "${OPENCLAW_BIN}" mcp set fm-demo "${server_json}" >/dev/null
+  probe_json="$("${OPENCLAW_BIN}" mcp probe fm-demo --json 2>&1)" || {
+    printf '%s\n' "${probe_json}" >&2
+    fail "OpenClaw MCP probe failed for fm-demo."
+  }
+  tools_in_payload "${probe_json}" || fail "OpenClaw MCP probe did not expose all Factor Mining Demo tools."
 }
 
 require_command "openclaw" "Install the OpenClaw CLI first, then rerun this installer. For npm-based installs, run: npm install -g openclaw"
@@ -396,10 +486,8 @@ fi
 patch_output="$(patch_agent_config)"
 printf '%s\n' "${patch_output}"
 
-config_changed="0"
 config_hash_after="$(config_hash "${CONFIG_PATH}")"
 if [[ "${config_hash_before}" != "${config_hash_after}" || "${patch_output}" == *"agent_config_changed=true"* ]]; then
-  config_changed="1"
   gateway_reload_needed="1"
 fi
 
@@ -407,7 +495,7 @@ if [[ "${patch_output}" == *"global_deny_blockers="* ]]; then
   blockers="$(printf '%s\n' "${patch_output}" | awk -F= '/^global_deny_blockers=/{print $2}')"
   if [[ -n "${blockers}" ]]; then
     warn "OpenClaw global tools.deny blocks required local-agent capabilities: ${blockers}"
-    warn "Factor Mining local-agent work needs local read/write/edit/apply_patch/exec/process/web_fetch capability. This installer does not change global deny policy."
+    warn "Factor Mining work needs local read/write/edit/apply_patch/exec/process/web_fetch capability. This installer does not change global deny policy."
   fi
 fi
 
@@ -424,11 +512,9 @@ if [[ "${gateway_reload_needed}" == "1" && "${gateway_was_running}" == "yes" ]];
 fi
 ensure_service_running "node" "node host"
 
-log "Verifying installed OpenClaw plugin"
-"${OPENCLAW_BIN}" plugins inspect "${PLUGIN_ID}"
+verify_mcp_tools
 verify_skills
 verify_nodes
-verify_status_helper
 
 printf '\n%s\n' "OpenClaw Factor Mining Demo is installed."
 printf '\n%s\n' "Next commands:"

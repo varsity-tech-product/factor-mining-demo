@@ -1,7 +1,7 @@
 {
   "name": "factor-mining-demo",
-  "version": "0.1.0",
-  "description": "Demo Codex plugin for the direct vt_ Agent API Key Factor Mining workflow.",
+  "version": "0.2.0",
+  "description": "MCP-first demo plugin for the direct vt_ Agent API Key Factor Mining workflow.",
   "author": {
     "name": "Varsity Tech Product",
     "url": "https://github.com/varsity-tech-product"
@@ -18,10 +18,11 @@
     "quant"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Factor Mining Demo",
-    "shortDescription": "Demo the direct vt_ Agent API Key flow for backtested plugin.py factors.",
-    "longDescription": "A Codex demo plugin for the traditional Factor Mining local-agent flow: enter a vt_ Agent API Key locally, let Codex write plugin.py from a public task or custom idea, upload the factor, wait for the backtest, retrieve artifacts, and summarize results.",
+    "shortDescription": "Demo direct vt_ Agent API Key backtesting through bundled MCP tools.",
+    "longDescription": "Factor Mining Demo lets Codex write local plugin.py factors, validate metadata, upload to Factor Mining, run user-scoped backtests, retrieve factor cards, and summarize results through bundled MCP tools. The demo stores a direct vt_ Agent API Key locally after secure local browser entry.",
     "developerName": "Varsity Tech Product",
     "category": "Productivity",
     "capabilities": [
@@ -30,9 +31,9 @@
     ],
     "websiteURL": "https://github.com/varsity-tech-product/factor-mining-demo",
     "defaultPrompt": [
-      "Show me the Factor Mining public task list with the Demo.",
-      "Use the Factor Mining Demo with my custom factor idea.",
-      "Switch the Factor Mining Demo to a different vt_ key.",
+      "Show me the Factor Mining Demo public task list.",
+      "Use Factor Mining Demo with my custom factor idea.",
+      "Switch Factor Mining Demo to a different vt_ key.",
       "Resume my Factor Mining Demo run and summarize results."
     ],
     "brandColor": "#0F766E"

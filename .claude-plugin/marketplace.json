@@ -10,8 +10,8 @@
     {
       "name": "factor-mining-demo",
       "description": "Demo the direct vt_ Agent API Key Factor Mining workflow.",
-      "version": "0.1.0",
-      "source": "./adapters/claude-code/factor-mining-demo",
+      "version": "0.2.0",
+      "source": "./plugins/factor-mining-demo",
       "category": "Productivity",
       "tags": [
         "factor-mining",
