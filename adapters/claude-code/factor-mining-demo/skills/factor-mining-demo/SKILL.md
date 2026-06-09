@@ -14,6 +14,34 @@ Claude Code runs the helper commands from the plugin directory and summarizes
 the result for the user. The user does not need to run the command sequence
 manually.
 
+## Helper Command Resolution
+
+Use the bundled helper commands. In Claude Code, the plugin runtime normally
+exposes these wrappers on `PATH`.
+
+OpenClaw installs this Claude-compatible bundle under:
+
+```text
+~/.openclaw/extensions/factor-mining-demo/
+```
+
+OpenClaw may not add the bundle `bin/` directory to `PATH`. When running in
+OpenClaw, first check whether the wrapper command is on `PATH`. If it is not,
+use the absolute wrapper path under:
+
+```text
+~/.openclaw/extensions/factor-mining-demo/bin/
+```
+
+For example, if `factor-mining-demo-status` is not on `PATH`, run:
+
+```bash
+"$HOME/.openclaw/extensions/factor-mining-demo/bin/factor-mining-demo-status"
+```
+
+Do not claim the helpers are unavailable until both the `PATH` command and the
+OpenClaw absolute wrapper path have been checked.
+
 ## Setup And Status
 
 Setup uses the production Factor Mining API URL by default:

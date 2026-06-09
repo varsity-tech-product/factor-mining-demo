@@ -91,10 +91,11 @@ def main() -> None:
     require_no_text(skill, "python3 scripts/")
 
     readme = ROOT / "README.md"
-    require_text(readme, "feat/claude-openclaw-adapters")
-    require_text(readme, "After this branch is merged to main")
+    require_text(readme, "Claude Code And OpenClaw")
     require_text(readme, "openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo")
-    require_no_text(readme, "openclaw plugins install ./adapters/openclaw/factor-mining-demo")
+    require_no_text(readme, "openclaw plugins install " + "./adapters/openclaw/factor-mining-demo")
+    require_no_text(readme, "feat/" + "claude-openclaw-adapters")
+    require_no_text(readme, "After this branch is " + "merged to main")
 
     print("adapter validation passed")
 

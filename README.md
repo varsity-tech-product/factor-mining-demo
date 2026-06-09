@@ -62,35 +62,12 @@ Open Codex Desktop and start a new chat with:
 Use the Factor Mining Demo plugin. Verify Factor Mining status, then show me the Factor Mining public task list. Do not create a session until I choose a public task or provide a custom idea. Then write a valid plugin.py locally, upload it, wait for the backtest, fetch the default factor card if available, and summarize the result.
 ```
 
-## Adapters
+## Claude Code And OpenClaw
 
 Codex is the original demo path. The Claude Code bundle under
 `adapters/claude-code/factor-mining-demo` adds Claude Code support and is also
 the OpenClaw-compatible bundle that OpenClaw can install from the marketplace.
 All paths use the same direct `vt_` Agent API Key workflow.
-
-### Development Testing On This Feature Branch
-
-This adapter work is currently on `feat/claude-openclaw-adapters`.
-
-Install the feature branch with Claude Code:
-
-```bash
-claude plugin marketplace add varsity-tech-product/factor-mining-demo@feat/claude-openclaw-adapters
-claude plugin install factor-mining-demo@factor-mining-demo-marketplace
-```
-
-Validate the local checkout with OpenClaw using an isolated home directory:
-
-```bash
-TMP_HOME="$(mktemp -d)"
-HOME="$TMP_HOME" openclaw plugins marketplace list . --json
-HOME="$TMP_HOME" openclaw plugins install factor-mining-demo --marketplace .
-HOME="$TMP_HOME" openclaw plugins list --json
-HOME="$TMP_HOME" openclaw plugins inspect factor-mining-demo --json
-```
-
-### After this branch is merged to main
 
 Install with Claude Code:
 
@@ -104,6 +81,10 @@ Install with OpenClaw:
 ```bash
 openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo
 ```
+
+OpenClaw requires a running gateway and a paired local node host for local file
+and command tools. After installing the plugin, run or start OpenClaw normally,
+then ask the Factor Mining agent to verify status or list public tasks.
 
 For all adapters, keys are entered only through local hidden prompts or local
 browser setup pages. Do not paste keys into chat.
