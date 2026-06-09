@@ -76,18 +76,30 @@ claude plugin marketplace add varsity-tech-product/factor-mining-demo@main
 claude plugin install factor-mining-demo@factor-mining-demo-marketplace
 ```
 
-Install with OpenClaw:
+Recommended one-command OpenClaw install:
 
 ```bash
-openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo
+curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-openclaw.sh | bash
 ```
 
-OpenClaw requires a running gateway and a paired local node host for local file
-and command tools. After installing the plugin, run or start OpenClaw normally,
-then ask the Factor Mining agent to verify status or list public tasks.
+Prerequisites:
 
-For all adapters, keys are entered only through local hidden prompts or local
-browser setup pages. Do not paste keys into chat.
+- OpenClaw CLI installed.
+- OpenClaw model/auth already configured.
+- The installer sets up the OpenClaw gateway service, local node host service,
+  and `factormining` agent where possible.
+- Enter the `vt_` key only through the hidden prompt or local browser setup
+  page. Do not paste the key into chat.
+
+Manual OpenClaw bundle install:
+
+```bash
+openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo --force
+```
+
+This command only installs the bundle and is for manual install flows where the
+gateway, paired local node host, Factor Mining-capable agent, skill allowlist,
+and local file/command tool policy are already configured.
 
 ## Switch Keys
 

@@ -11,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_ROOT = ROOT / "scripts"
 CLAUDE_ADAPTER = ROOT / "adapters" / "claude-code" / "factor-mining-demo"
 OPENCLAW_ADAPTER_ROOT = ROOT / "adapters" / "openclaw"
+OTHER_NATIVE_ADAPTER_ROOTS = [
+    ROOT / "adapters" / ("open" + "code"),
+    ROOT / "adapters" / ("Open" + "Code"),
+    ROOT / "adapters" / ("open" + "-code"),
+]
 CLAUDE_BIN_WRAPPERS = [
     "factor-mining-demo-setup",
     "factor-mining-demo-browser-setup",
@@ -78,6 +83,8 @@ def main() -> None:
     assert claude_plugin["name"] == "factor-mining-demo"
 
     require_absent(OPENCLAW_ADAPTER_ROOT)
+    for adapter_root in OTHER_NATIVE_ADAPTER_ROOTS:
+        require_absent(adapter_root)
     require(CLAUDE_ADAPTER / "README.md")
     require(CLAUDE_ADAPTER / "skills" / "factor-mining-demo" / "SKILL.md")
     compare_scripts(CLAUDE_ADAPTER)
@@ -91,8 +98,22 @@ def main() -> None:
     require_no_text(skill, "python3 scripts/")
 
     readme = ROOT / "README.md"
+    installer = ROOT / "install-openclaw.sh"
+    require_executable(installer)
+    require_text(installer, "plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo --force")
+    require_text(installer, 'AGENT_ID="factormining"')
+    require_text(installer, "skills check --agent")
+    require_text(installer, "normalize_path")
+    require_text(installer, "Path(sys.argv[1].strip()).expanduser()")
+
     require_text(readme, "Claude Code And OpenClaw")
-    require_text(readme, "openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo")
+    require_text(readme, "curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-openclaw.sh | bash")
+    require_text(readme, "only installs the bundle")
+    require_text(readme, "manual install")
+    require_text(readme, "vt_")
+    require_text(readme, "Do not paste the key into chat")
+    require_text(readme, "openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo --force")
+    require_no_text(readme, "After installing the plugin, run or start OpenClaw normally")
     require_no_text(readme, "openclaw plugins install " + "./adapters/openclaw/factor-mining-demo")
     require_no_text(readme, "feat/" + "claude-openclaw-adapters")
     require_no_text(readme, "After this branch is " + "merged to main")
