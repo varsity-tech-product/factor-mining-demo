@@ -428,9 +428,9 @@ import json
 import os
 
 print(json.dumps({
-    "command": "/bin/zsh",
+    "command": "python",
     "cwd": os.environ["PLUGIN_ROOT"],
-    "args": ["-lc", "exec python3 ./mcp/server.py"],
+    "args": ["./mcp/launch.py"],
 }))
 PY
   )"
@@ -445,6 +445,7 @@ PY
 
 require_command "openclaw" "Install the OpenClaw CLI first, then rerun this installer. For npm-based installs, run: npm install -g openclaw"
 require_command "python3" "Install Python 3, then rerun this installer."
+require_command "python" "Install Python so the MCP host can start the bundled server with the python command, then rerun this installer."
 
 OPENCLAW_BIN="$(command -v openclaw)"
 CONFIG_PATH="$(normalize_path "$("${OPENCLAW_BIN}" config file)")"

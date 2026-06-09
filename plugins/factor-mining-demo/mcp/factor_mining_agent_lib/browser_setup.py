@@ -154,7 +154,7 @@ def _setup_page(error: str | None) -> str:
 <body>
   <main>
     <h1>Configure Factor Mining Demo</h1>
-    <p>Paste your Factor Mining Agent API Key. The key is sent only to this local setup helper and is not shown in chat.</p>
+    <p>Paste your Factor Mining Agent API Key. The key is sent only to this local setup page and is not shown in chat.</p>
     {error_html}
     <form method="post" autocomplete="off">
       <label for="api_key">Agent API Key</label>
@@ -204,7 +204,7 @@ def _success_page() -> str:
 <body>
   <main>
     <h1>Key Saved</h1>
-    <p>The local setup helper saved the key. You can close this page and return to Codex.</p>
+    <p>The local setup page saved the key. You can close this page and return to your agent.</p>
   </main>
 </body>
 </html>"""

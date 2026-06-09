@@ -21,8 +21,10 @@ The product surface is the MCP tool set:
 - `factor_mining_demo_clear_config`
 
 Key entry happens through the local browser setup page returned by the MCP
-tool, or by a secure local prompt controlled by the MCP host. Never paste the
-key into chat.
+tool. Never paste the key into chat.
+
+MCP startup requires a `python` executable available to the host process. The
+committed launcher then starts the bundled server with that interpreter.
 
 ## Codex CLI
 

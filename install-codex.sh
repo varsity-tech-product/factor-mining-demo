@@ -90,7 +90,7 @@ else
   fi
 fi
 
-echo "Installing Codex plugin: ${PLUGIN_NAME}@${MARKETPLACE_NAME}"
+echo "Installing Factor Mining Demo package: ${PLUGIN_NAME}@${MARKETPLACE_NAME}"
 if plugin_installed; then
   echo "Plugin already installed."
 else
@@ -109,7 +109,7 @@ if [[ ! -f "${PLUGIN_ROOT}/.mcp.json" ]]; then
 fi
 
 if [[ "${START_MODE}" == "none" ]]; then
-  echo "Codex plugin is installed. Start it with:"
+  echo "Factor Mining Demo is installed. Start it with:"
   printf 'codex %q\n' "${CODEX_PROMPT}"
   echo "For Codex Desktop, run:"
   printf 'codex app %q\n' "${WORKSPACE_PATH}"

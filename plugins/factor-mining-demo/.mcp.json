@@ -1,11 +1,10 @@
 {
   "mcpServers": {
     "fm-demo": {
-      "command": "/bin/zsh",
+      "command": "python",
       "cwd": ".",
       "args": [
-        "-lc",
-        "exec python3 ./mcp/server.py"
+        "./mcp/launch.py"
       ]
     }
   }
