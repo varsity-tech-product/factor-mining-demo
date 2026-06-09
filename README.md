@@ -2,7 +2,7 @@
 
 Demo Codex plugin for the direct Factor Mining Agent API Key flow.
 
-This repository shows the traditional local-agent workflow:
+This repository shows the direct local demo workflow:
 
 1. Install the Codex plugin.
 2. Enter a `vt_` Factor Mining Agent API Key locally.
@@ -61,6 +61,27 @@ Open Codex Desktop and start a new chat with:
 ```text
 Use the Factor Mining Demo plugin. Verify Factor Mining status, then show me the Factor Mining public task list. Do not create a session until I choose a public task or provide a custom idea. Then write a valid plugin.py locally, upload it, wait for the backtest, fetch the default factor card if available, and summarize the result.
 ```
+
+## Adapters
+
+Codex is the original demo path. Claude Code and OpenClaw adapters are provided
+under `adapters/` and use the same direct `vt_` Agent API Key workflow.
+
+Install with Claude Code:
+
+```bash
+claude plugin marketplace add varsity-tech-product/factor-mining-demo@main
+claude plugin install factor-mining-demo@factor-mining-demo-marketplace
+```
+
+Install with OpenClaw:
+
+```bash
+openclaw plugins install ./adapters/openclaw/factor-mining-demo
+```
+
+For all adapters, keys are entered only through local hidden prompts or local
+browser setup pages. Do not paste keys into chat.
 
 ## Switch Keys
 

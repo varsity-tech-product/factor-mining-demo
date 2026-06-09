@@ -1,0 +1,14 @@
+{
+  "id": "factor-mining-demo",
+  "name": "Factor Mining Demo",
+  "version": "0.1.0",
+  "description": "Demo the direct vt_ Agent API Key Factor Mining workflow.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "skills": [
+    "skills/factor-mining-demo"
+  ]
+}

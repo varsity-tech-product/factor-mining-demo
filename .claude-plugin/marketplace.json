@@ -1,0 +1,25 @@
+{
+  "name": "factor-mining-demo-marketplace",
+  "owner": {
+    "name": "Varsity Tech Product",
+    "url": "https://github.com/varsity-tech-product"
+  },
+  "description": "Factor Mining Demo plugins for local-agent workflows.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "factor-mining-demo",
+      "description": "Demo the direct vt_ Agent API Key Factor Mining workflow.",
+      "version": "0.1.0",
+      "source": "./adapters/claude-code/factor-mining-demo",
+      "category": "Productivity",
+      "tags": [
+        "factor-mining",
+        "quant",
+        "backtesting",
+        "agent-key"
+      ],
+      "strict": true
+    }
+  ]
+}
