@@ -13,4 +13,3 @@ sync_one() {
 }
 
 sync_one "${ROOT}/adapters/claude-code/factor-mining-demo"
-sync_one "${ROOT}/adapters/openclaw/factor-mining-demo"

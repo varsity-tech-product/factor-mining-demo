@@ -26,14 +26,14 @@ If setup is missing, run setup from the plugin directory. Never ask the user to
 paste the Factor Mining Agent API Key into chat.
 
 ```bash
-python3 scripts/factor_setup.py
+factor-mining-demo-setup
 ```
 
 When Claude Code is already running and the user wants to add or switch Agent
 API Keys, use the local browser setup page:
 
 ```bash
-python3 scripts/factor_setup.py --browser
+factor-mining-demo-browser-setup
 ```
 
 The browser setup page opens on `127.0.0.1`, accepts the Agent API Key in a
@@ -44,20 +44,24 @@ The plain setup script collects the Agent API Key through a hidden terminal
 prompt. For non-interactive automation, it can read the key from non-echo stdin:
 
 ```bash
-python3 scripts/factor_setup.py --api-key-stdin
+factor-mining-demo-setup --api-key-stdin
 ```
 
 Use `--base-url` only when the user explicitly provides a staging or private
 Factor Mining API environment:
 
 ```bash
-python3 scripts/factor_setup.py --base-url <staging-or-private-api-url>
+factor-mining-demo-setup --base-url <staging-or-private-api-url>
 ```
 
 Setup and status must call `/agent/status`. Continue only when `/health` is
 healthy and `/agent/status` accepts the delegated Agent API Key. The current
 success response is `status: ok` and `agent_key: valid`. If `/agent/status`
 returns `403`, tell the user the key is not an external-agent credential.
+
+```bash
+factor-mining-demo-status
+```
 
 Configuration is stored outside project repositories at:
 
@@ -85,7 +89,7 @@ Run state is stored at:
 - Do not create, update, or patch tasks; delegated external-agent keys are
   read-only for task publication surfaces.
 - Do not import, exec, eval, or otherwise execute generated `plugin.py`.
-- Use `python3 scripts/factor_api.py metadata` or the same `ast` plus
+- Use `factor-mining-demo-api metadata` or the same `ast` plus
   `ast.literal_eval` approach for static metadata extraction.
 - Do not print generated `plugin.py` source in summaries.
 - Use only user-visible orchestrator IDs in reports: `session_id`, `plugin_id`,
@@ -97,7 +101,7 @@ Run state is stored at:
 1. Confirm setup.
    - If config is missing or invalid, run setup.
    - If Claude Code is already running and the user needs to use a different key, run
-     `python3 scripts/factor_setup.py --browser`.
+     `factor-mining-demo-browser-setup`.
    - If setup rejects the key, tell the user to provide a Factor Mining Agent
      API Key, not a frontend user key.
 
@@ -108,7 +112,7 @@ Run state is stored at:
      `task_payload` before session creation.
 
 ```bash
-python3 scripts/factor_api.py tasks --limit 20 --status open
+factor-mining-demo-api tasks --limit 20 --status open
 ```
 
 3. Create or reuse a task-backed session.
@@ -116,7 +120,7 @@ python3 scripts/factor_api.py tasks --limit 20 --status open
 For worker mode, a published `task_id` is enough:
 
 ```bash
-python3 scripts/factor_api.py create-session --task-id <task_id> --client-run-id <client_run_id>
+factor-mining-demo-api create-session --task-id <task_id> --client-run-id <client_run_id>
 ```
 
 For free mode, create a direct `task_payload` before upload. It must include at
@@ -135,7 +139,7 @@ Include useful hints, economic mechanisms, regime considerations, risk sources,
 and target behavior when they are available.
 
 ```bash
-python3 scripts/factor_api.py create-session --idea "<research idea>" --task-payload-file task_payload.json --client-run-id <client_run_id>
+factor-mining-demo-api create-session --idea "<research idea>" --task-payload-file task_payload.json --client-run-id <client_run_id>
 ```
 
 4. Request dedup context when you have a draft description and formula. Use the
@@ -143,7 +147,7 @@ python3 scripts/factor_api.py create-session --idea "<research idea>" --task-pay
    near-duplicates.
 
 ```bash
-python3 scripts/factor_api.py dedup-context --session-id <session_id> --description "<draft description>" --formula "<draft formula>"
+factor-mining-demo-api dedup-context --session-id <session_id> --description "<draft description>" --formula "<draft formula>"
 ```
 
 5. Write or locate one `plugin.py`.
@@ -155,14 +159,14 @@ python3 scripts/factor_api.py dedup-context --session-id <session_id> --descript
 6. Inspect metadata statically before upload.
 
 ```bash
-python3 scripts/factor_api.py metadata --plugin-path plugin.py
+factor-mining-demo-api metadata --plugin-path plugin.py
 ```
 
 7. Run one waitable upload and backtest command. Use `fwd_period=7` when neither
    the task nor user specifies a horizon.
 
 ```bash
-python3 scripts/factor_upload_backtest.py --session-id <session_id> --plugin-path plugin.py --client-run-id <client_run_id> --position-mode both --fwd-period 7 --wait
+factor-mining-demo-upload-backtest --session-id <session_id> --plugin-path plugin.py --client-run-id <client_run_id> --position-mode both --fwd-period 7 --wait
 ```
 
 The upload helper intentionally omits optional `submitter_label` and `agent_id`
@@ -343,7 +347,7 @@ available. Report the trade log as a saved CSV path when present.
 Use resume with waiting after an interrupted Claude Code session:
 
 ```bash
-python3 scripts/factor_api.py resume --client-run-id <client_run_id> --wait
+factor-mining-demo-api resume --client-run-id <client_run_id> --wait
 ```
 
 ## Result Report

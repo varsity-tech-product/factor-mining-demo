@@ -3,14 +3,20 @@ from __future__ import annotations
 
 import filecmp
 import json
+import os
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_ROOT = ROOT / "scripts"
-ADAPTERS = [
-    ROOT / "adapters" / "claude-code" / "factor-mining-demo",
-    ROOT / "adapters" / "openclaw" / "factor-mining-demo",
+CLAUDE_ADAPTER = ROOT / "adapters" / "claude-code" / "factor-mining-demo"
+OPENCLAW_ADAPTER_ROOT = ROOT / "adapters" / "openclaw"
+CLAUDE_BIN_WRAPPERS = [
+    "factor-mining-demo-setup",
+    "factor-mining-demo-browser-setup",
+    "factor-mining-demo-status",
+    "factor-mining-demo-api",
+    "factor-mining-demo-upload-backtest",
 ]
 
 
@@ -22,6 +28,29 @@ def load_json(path: Path) -> dict:
 def require(path: Path) -> None:
     if not path.exists():
         raise AssertionError(f"missing required path: {path.relative_to(ROOT)}")
+
+
+def require_absent(path: Path) -> None:
+    if path.exists():
+        raise AssertionError(f"unexpected path: {path.relative_to(ROOT)}")
+
+
+def require_executable(path: Path) -> None:
+    require(path)
+    if not os.access(path, os.X_OK):
+        raise AssertionError(f"path is not executable: {path.relative_to(ROOT)}")
+
+
+def require_text(path: Path, needle: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if needle not in text:
+        raise AssertionError(f"missing text in {path.relative_to(ROOT)}: {needle}")
+
+
+def require_no_text(path: Path, needle: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if needle in text:
+        raise AssertionError(f"unexpected text in {path.relative_to(ROOT)}: {needle}")
 
 
 def compare_scripts(adapter: Path) -> None:
@@ -48,15 +77,24 @@ def main() -> None:
     claude_plugin = load_json(ROOT / "adapters" / "claude-code" / "factor-mining-demo" / ".claude-plugin" / "plugin.json")
     assert claude_plugin["name"] == "factor-mining-demo"
 
-    openclaw_manifest = load_json(ROOT / "adapters" / "openclaw" / "factor-mining-demo" / "openclaw.plugin.json")
-    assert openclaw_manifest["id"] == "factor-mining-demo"
-    assert openclaw_manifest["configSchema"]["additionalProperties"] is False
-    assert openclaw_manifest["skills"] == ["skills/factor-mining-demo"]
+    require_absent(OPENCLAW_ADAPTER_ROOT)
+    require(CLAUDE_ADAPTER / "README.md")
+    require(CLAUDE_ADAPTER / "skills" / "factor-mining-demo" / "SKILL.md")
+    compare_scripts(CLAUDE_ADAPTER)
 
-    for adapter in ADAPTERS:
-        require(adapter / "README.md")
-        require(adapter / "skills" / "factor-mining-demo" / "SKILL.md")
-        compare_scripts(adapter)
+    for wrapper in CLAUDE_BIN_WRAPPERS:
+        require_executable(CLAUDE_ADAPTER / "bin" / wrapper)
+
+    skill = CLAUDE_ADAPTER / "skills" / "factor-mining-demo" / "SKILL.md"
+    for wrapper in CLAUDE_BIN_WRAPPERS:
+        require_text(skill, wrapper)
+    require_no_text(skill, "python3 scripts/")
+
+    readme = ROOT / "README.md"
+    require_text(readme, "feat/claude-openclaw-adapters")
+    require_text(readme, "After this branch is merged to main")
+    require_text(readme, "openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo")
+    require_no_text(readme, "openclaw plugins install ./adapters/openclaw/factor-mining-demo")
 
     print("adapter validation passed")
 
