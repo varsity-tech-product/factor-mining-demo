@@ -23,8 +23,10 @@ The product surface is the MCP tool set:
 Key entry happens through the local browser setup page returned by the MCP
 tool. Never paste the key into chat.
 
-MCP startup requires a `python` executable available to the host process. The
-committed launcher then starts the bundled server with that interpreter.
+MCP startup requires Python. Codex and Claude Code use the bundled plugin
+manifests; the OpenClaw installer writes an absolute `python3` path into
+OpenClaw's MCP config so the gateway/node host does not depend on shell startup
+files.
 
 ## Codex CLI
 
@@ -64,8 +66,8 @@ claude plugin install factor-mining-demo@factor-mining-demo-marketplace
 
 ## OpenClaw
 
-OpenClaw uses the Claude-compatible bundle from the same plugin package.
-OpenClaw CLI, model settings, and auth must already be configured.
+OpenClaw uses the same bundle package. OpenClaw CLI, model settings, and auth
+must already be configured.
 
 Recommended install:
 
@@ -73,10 +75,17 @@ Recommended install:
 curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-openclaw.sh | bash
 ```
 
+The installer adds or updates the `factormining` agent, configures the bundled
+`fm-demo` MCP server with an absolute `python3` path, verifies the tools, and
+restarts the gateway when needed.
+
 Manual bundle install:
 
 ```bash
 openclaw plugins install factor-mining-demo --marketplace varsity-tech-product/factor-mining-demo --force
+PLUGIN_ROOT="$(openclaw plugins inspect factor-mining-demo --json --runtime | python3 -c 'import json,sys; p=json.load(sys.stdin); print((p.get("plugin") or {}).get("rootDir") or (p.get("plugin") or {}).get("source"))')"
+openclaw mcp set fm-demo "{\"command\":\"$(command -v python3)\",\"cwd\":\"${PLUGIN_ROOT}\",\"args\":[\"./mcp/launch.py\"]}"
+openclaw gateway restart
 ```
 
 OpenClaw may display provider-prefixed tool names such as

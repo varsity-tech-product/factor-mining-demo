@@ -68,13 +68,13 @@ def main() -> int:
         artifact_store_url = f"http://127.0.0.1:{artifact_store.server_port}/artifact.json"
         api.target_url = artifact_store_url
         base_url = f"http://127.0.0.1:{api.server_port}"
-        client = ApiClient(base_url, "vt_validation_secret")
+        client = ApiClient(base_url, "validation-secret")
 
         payload = client.artifact("job-1", "default_factor_card.json")
 
         expected_path = f"/jobs/{quote('job-1', safe='')}/files/{quote('default_factor_card.json', safe='')}"
         assert payload == {"ok": True, "source": "artifact-store"}, payload
-        assert api.requests == [{"path": expected_path, "authorization": "Bearer vt_validation_secret"}], api.requests
+        assert api.requests == [{"path": expected_path, "authorization": "Bearer validation-secret"}], api.requests
         assert artifact_store.requests == [{"path": "/artifact.json", "authorization": None}], artifact_store.requests
     finally:
         api.shutdown()

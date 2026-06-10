@@ -20,6 +20,7 @@ REQUIRED_MCP_TOOLS=(
   factor_mining_demo_get_workflow
   factor_mining_demo_get_job
   factor_mining_demo_get_artifact
+  factor_mining_demo_clear_config
 )
 
 log() {
@@ -197,6 +198,7 @@ required_local_capabilities = {
     "web_fetch",
 }
 required_blockers = required_local_capabilities | {"group:fs", "group:runtime", "group:web"}
+required_agent_allow = ["fm-demo__*"]
 
 if config_path.exists():
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -245,6 +247,48 @@ if not isinstance(tools, dict):
     agent["tools"] = tools
     changed = True
 assign(tools, "profile", "full")
+
+def merge_string_list(target, key, additions, removals=()):
+    global changed
+    removal_set = set(removals)
+    current = target.get(key)
+    if current is None:
+        current = []
+    elif not isinstance(current, list):
+        current = []
+    else:
+        current = [entry for entry in current if isinstance(entry, str) and entry not in removal_set]
+    merged = list(current)
+    for entry in additions:
+        if entry not in merged:
+            merged.append(entry)
+    if target.get(key) != merged:
+        target[key] = merged
+        changed = True
+
+merge_string_list(tools, "alsoAllow", required_agent_allow, removals=["bundle-mcp"])
+
+sandbox = tools.get("sandbox")
+if sandbox is None:
+    sandbox = {}
+    tools["sandbox"] = sandbox
+    changed = True
+elif not isinstance(sandbox, dict):
+    sandbox = {}
+    tools["sandbox"] = sandbox
+    changed = True
+
+sandbox_tools = sandbox.get("tools")
+if sandbox_tools is None:
+    sandbox_tools = {}
+    sandbox["tools"] = sandbox_tools
+    changed = True
+elif not isinstance(sandbox_tools, dict):
+    sandbox_tools = {}
+    sandbox["tools"] = sandbox_tools
+    changed = True
+
+merge_string_list(sandbox_tools, "alsoAllow", required_agent_allow, removals=["bundle-mcp"])
 
 deny = tools.get("deny")
 if deny is None:
@@ -341,6 +385,21 @@ verify_nodes() {
   fi
 }
 
+verify_model_auth() {
+  local status_text
+  log "Verifying OpenClaw model auth for agent ${AGENT_ID}"
+  if status_text="$("${OPENCLAW_BIN}" models status --agent "${AGENT_ID}" --check 2>&1)"; then
+    printf '%s\n' "${status_text}"
+    return 0
+  fi
+
+  printf '%s\n' "${status_text}" >&2
+  warn "OpenClaw model auth is not configured for the isolated ${AGENT_ID} agent."
+  warn "Configure the model provider for this agent before running Factor Mining Demo turns."
+  printf '%s\n' "Next action:"
+  printf '%s\n' "  OPENCLAW_AGENT_DIR=\"${AGENT_DIR}\" openclaw models auth paste-api-key --provider minimax --profile-id minimax:manual"
+}
+
 tools_in_payload() {
   local payload="$1"
   REQUIRED_TOOLS_JSON="$(printf '%s\n' "${REQUIRED_MCP_TOOLS[@]}" | python3 -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')" \
@@ -354,7 +413,9 @@ payload = os.environ.get("PAYLOAD") or ""
 
 def names(value):
     found = set()
-    if isinstance(value, dict):
+    if isinstance(value, str):
+        found.add(value)
+    elif isinstance(value, dict):
         for key, item in value.items():
             if key in {"name", "toolName", "id"} and isinstance(item, str):
                 found.add(item)
@@ -423,12 +484,12 @@ print(root)
 PY
   )" || fail "OpenClaw plugin bundle metadata did not include the expected MCP capability."
 
-  server_json="$(PLUGIN_ROOT="${plugin_root}" python3 <<'PY'
+  server_json="$(PLUGIN_ROOT="${plugin_root}" PYTHON_FOR_MCP="${PYTHON_FOR_MCP}" python3 <<'PY'
 import json
 import os
 
 print(json.dumps({
-    "command": "python",
+    "command": os.environ["PYTHON_FOR_MCP"],
     "cwd": os.environ["PLUGIN_ROOT"],
     "args": ["./mcp/launch.py"],
 }))
@@ -445,9 +506,9 @@ PY
 
 require_command "openclaw" "Install the OpenClaw CLI first, then rerun this installer. For npm-based installs, run: npm install -g openclaw"
 require_command "python3" "Install Python 3, then rerun this installer."
-require_command "python" "Install Python so the MCP host can start the bundled server with the python command, then rerun this installer."
 
 OPENCLAW_BIN="$(command -v openclaw)"
+PYTHON_FOR_MCP="$(command -v python3)"
 CONFIG_PATH="$(normalize_path "$("${OPENCLAW_BIN}" config file)")"
 WORKSPACE_DIR="$(normalize_path "${WORKSPACE_DIR}")"
 AGENT_DIR="$(normalize_path "${AGENT_DIR}")"
@@ -516,6 +577,7 @@ ensure_service_running "node" "node host"
 verify_mcp_tools
 verify_skills
 verify_nodes
+verify_model_auth
 
 printf '\n%s\n' "OpenClaw Factor Mining Demo is installed."
 printf '\n%s\n' "Next commands:"
