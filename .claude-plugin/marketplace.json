@@ -10,7 +10,7 @@
     {
       "name": "factor-mining-demo",
       "description": "Demo the direct vt_ Agent API Key Factor Mining workflow.",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "source": "./plugins/factor-mining-demo",
       "category": "Productivity",
       "tags": [

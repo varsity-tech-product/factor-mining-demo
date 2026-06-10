@@ -65,6 +65,11 @@ Write or locate one `plugin.py`, then call
 import or execute generated code. When the metadata is valid and the user is
 ready to submit, call `factor_mining_demo_upload_backtest_wait`. Use
 `fwd_period=7` when neither the task nor user specifies a horizon.
+The tool saves `default_factor_card.json` and image artifacts referenced by the
+factor card into `factor_mining_demo_artifacts/` beside `plugin.py` unless an
+explicit `output_dir` is provided. Use the returned artifact paths and original
+saved images; do not recreate backend plots from JSON when those image
+artifacts are available.
 
 After upload, inspect the returned `ok`, `status`, `terminal_status`,
 `failures`, sanitized job statuses, artifact availability, and factor-card

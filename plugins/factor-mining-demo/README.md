@@ -11,6 +11,10 @@ MCP startup requires Python. Codex and Claude Code use the bundled plugin
 manifests; the OpenClaw installer configures an absolute `python3` path so the
 gateway/node host does not depend on shell startup files.
 
+Completed backtest runs save `default_factor_card.json` and factor-card image
+artifacts by default into `factor_mining_demo_artifacts/` beside the submitted
+`plugin.py`. Explicit `output_dir` tool arguments override that location.
+
 ## MCP Tools
 
 - `factor_mining_demo_status`

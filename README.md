@@ -28,6 +28,10 @@ manifests; the OpenClaw installer writes an absolute `python3` path into
 OpenClaw's MCP config so the gateway/node host does not depend on shell startup
 files.
 
+Completed backtest runs save `default_factor_card.json` and factor-card image
+artifacts by default into `factor_mining_demo_artifacts/` beside the submitted
+`plugin.py`. Explicit `output_dir` tool arguments override that location.
+
 ## Codex CLI
 
 ```bash

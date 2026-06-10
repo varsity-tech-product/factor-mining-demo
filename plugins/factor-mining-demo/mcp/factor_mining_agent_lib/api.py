@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 from urllib import parse, request
@@ -50,6 +52,40 @@ class ApiError(RuntimeError):
 
 class AgentStatusError(ApiError):
     pass
+
+
+@dataclass(frozen=True)
+class ArtifactDownload:
+    body: bytes
+    status: int
+    content_type: str
+    final_url: str
+    headers: Mapping[str, str]
+
+    @property
+    def size(self) -> int:
+        return len(self.body)
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(self.body).hexdigest()
+
+    def json_or_text(self, name: str | None = None) -> Any:
+        if not self.body:
+            return None
+        suffix = Path(name or "").suffix.lower()
+        content_type = self.content_type.lower()
+        is_json = "json" in content_type or suffix == ".json"
+        is_text = content_type.startswith("text/") or suffix in {".txt", ".csv", ".tsv", ".md", ".log"}
+        if not is_json and not is_text:
+            return self.body
+        text = self.body.decode("utf-8")
+        if is_json:
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return text
+        return text
 
 
 class NoRedirectHandler(request.HTTPRedirectHandler):
@@ -211,13 +247,25 @@ class ApiClient:
             )
         return payload
 
-    def _request_artifact_with_redirect_handling(self, path: str) -> Any:
+    def _read_artifact_response(self, response: Any) -> ArtifactDownload:
+        raw = response.read()
+        headers = {str(key): str(value) for key, value in response.headers.items()}
+        content_type = str(response.headers.get("Content-Type") or "").split(";", 1)[0].strip()
+        return ArtifactDownload(
+            body=raw,
+            status=int(getattr(response, "status", getattr(response, "code", 0)) or 0),
+            content_type=content_type,
+            final_url=str(getattr(response, "url", "") or ""),
+            headers=headers,
+        )
+
+    def _request_artifact_download_with_redirect_handling(self, path: str) -> ArtifactDownload:
         req = self._make_request("GET", path)
         try:
             with self.no_redirect_opener.open(req, timeout=self.timeout) as response:
                 status = int(getattr(response, "status", getattr(response, "code", 0)) or 0)
                 if status == 200:
-                    return self._decode(response)
+                    return self._read_artifact_response(response)
                 if status in REDIRECT_STATUSES:
                     location = response.headers.get("Location")
                     if not location:
@@ -228,7 +276,7 @@ class ApiClient:
                             url=req.full_url,
                             api_key=self.api_key,
                         )
-                    return self._follow_artifact_location(req.full_url, location)
+                    return self._follow_artifact_location_download(req.full_url, location)
                 payload = self._decode(response)
         except HTTPError as exc:
             if exc.code in REDIRECT_STATUSES:
@@ -241,7 +289,7 @@ class ApiClient:
                         url=req.full_url,
                         api_key=self.api_key,
                     ) from exc
-                return self._follow_artifact_location(req.full_url, location)
+                return self._follow_artifact_location_download(req.full_url, location)
             payload = self._decode(exc)
             raise ApiError(
                 "Factor Mining artifact request failed",
@@ -278,13 +326,16 @@ class ApiClient:
             )
         return payload
 
-    def _follow_artifact_location(self, original_url: str, location: str) -> Any:
+    def _request_artifact_with_redirect_handling(self, path: str, name: str | None = None) -> Any:
+        return self._request_artifact_download_with_redirect_handling(path).json_or_text(name)
+
+    def _follow_artifact_location_download(self, original_url: str, location: str) -> ArtifactDownload:
         target_url = parse.urljoin(original_url, location)
         req = request.Request(target_url, method="GET")
         try:
             with request.urlopen(req, timeout=self.timeout) as response:
-                payload = self._decode(response)
-                status = int(getattr(response, "status", getattr(response, "code", 0)) or 0)
+                download = self._read_artifact_response(response)
+                status = download.status
         except HTTPError as exc:
             payload = self._decode(exc)
             raise ApiError(
@@ -311,7 +362,7 @@ class ApiClient:
                 body=payload,
                 api_key=self.api_key,
             )
-        return payload
+        return download
 
     def health(self) -> Any:
         return self.request("GET", "/health", auth=False)
@@ -456,6 +507,12 @@ class ApiClient:
 
     def artifact(self, job_id: str, name: str = "default_factor_card.json") -> Any:
         return self._request_artifact_with_redirect_handling(
+            f"/jobs/{parse.quote(job_id, safe='')}/files/{parse.quote(name, safe='')}",
+            name=name,
+        )
+
+    def artifact_download(self, job_id: str, name: str = "default_factor_card.json") -> ArtifactDownload:
+        return self._request_artifact_download_with_redirect_handling(
             f"/jobs/{parse.quote(job_id, safe='')}/files/{parse.quote(name, safe='')}"
         )
 

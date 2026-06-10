@@ -19,7 +19,7 @@ MCP_ROOT = Path(__file__).resolve().parent
 if str(MCP_ROOT) not in sys.path:
     sys.path.insert(0, str(MCP_ROOT))
 
-from factor_mining_agent_lib.api import ApiClient, ApiError
+from factor_mining_agent_lib.api import ApiClient, ApiError, ArtifactDownload
 from factor_mining_agent_lib.browser_setup import _setup_page, _success_page
 from factor_mining_agent_lib.config import (
     AgentConfig,
@@ -38,7 +38,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "factor-mining-demo"
-SERVER_VERSION = "0.2.3"
+SERVER_VERSION = "0.2.4"
 MISSING_CREDENTIAL_MESSAGE = (
     "Factor Mining Demo setup is required. Call factor_mining_demo_setup_browser and enter the vt_ Agent API Key "
     "in the local browser page, not in chat."
@@ -51,6 +51,7 @@ TASK_PAYLOAD_REQUIRED_FIELDS = {
     "allowed_data",
     "fwd_period",
 }
+IMAGE_ARTIFACT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
 
 
 class McpServerError(RuntimeError):
@@ -255,7 +256,7 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "factor_mining_demo_upload_backtest_wait",
-        "description": "Parse metadata, upload plugin.py, submit a backtest, wait for terminal state, and fetch the default factor card.",
+        "description": "Parse metadata, upload plugin.py, submit a backtest, wait for terminal state, and save the default factor card plus image artifacts.",
         "inputSchema": {
             "type": "object",
             "required": ["session_id", "plugin_path"],
@@ -323,7 +324,7 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "factor_mining_demo_get_artifact",
-        "description": "Fetch a Factor Mining job artifact such as the default factor card.",
+        "description": "Fetch a Factor Mining job artifact such as the default factor card or a backtest image.",
         "inputSchema": {
             "type": "object",
             "required": ["job_id"],
@@ -528,7 +529,7 @@ def _upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Mapping[
     plugin_path = Path(_required_string(args, "plugin_path"))
     client_run_id = _optional_string(args, "client_run_id") or f"fm-{uuid.uuid4().hex}"
     artifact_name = _optional_string(args, "artifact_name") or "default_factor_card.json"
-    output_dir = _optional_string(args, "output_dir")
+    output_dir = _default_output_dir(_optional_string(args, "output_dir"), plugin_path=plugin_path)
     if output_dir:
         _validate_artifact_name(artifact_name)
 
@@ -588,7 +589,7 @@ def _resume_run(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] 
     home = _configured_home(args, env)
     state = load_run_state(_required_string(args, "client_run_id"), home=home)
     artifact_name = _optional_string(args, "artifact_name") or "default_factor_card.json"
-    output_dir = _optional_string(args, "output_dir")
+    output_dir = _default_output_dir(_optional_string(args, "output_dir"), state=state)
     if output_dir:
         _validate_artifact_name(artifact_name)
     if args.get("wait") is True:
@@ -644,9 +645,18 @@ def _get_artifact(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str
     output_dir = _optional_string(args, "output_dir")
     if output_dir:
         _validate_artifact_name(name)
-    artifact = client.artifact(_required_string(args, "job_id"), name)
-    saved_path = _save_json_artifact(output_dir, name, artifact)
-    result: dict[str, Any] = {"name": name, "status": "available", "artifact": artifact}
+    download = client.artifact_download(_required_string(args, "job_id"), name)
+    saved_path = _save_downloaded_artifact(output_dir, name, download)
+    artifact = _artifact_value_for_mcp(download, name)
+    result: dict[str, Any] = {
+        "name": name,
+        "status": "available",
+        **_download_metadata(download),
+    }
+    if isinstance(artifact, bytes):
+        result["binary"] = True
+    else:
+        result["artifact"] = artifact
     if saved_path:
         result["path"] = saved_path
     return _redact_payload(result)
@@ -674,6 +684,22 @@ def _configured_home(args: Mapping[str, Any], env: Mapping[str, str] | None) -> 
         return str(args["home"])
     active_env = env if env is not None else os.environ
     return active_env.get(HOME_ENV)
+
+
+def _default_output_dir(
+    output_dir: str | None,
+    *,
+    plugin_path: Path | None = None,
+    state: RunState | None = None,
+) -> str | None:
+    if output_dir:
+        return output_dir
+    source_path = plugin_path
+    if source_path is None and state and state.plugin_path:
+        source_path = Path(state.plugin_path)
+    if source_path is None:
+        return None
+    return str(source_path.parent / "factor_mining_demo_artifacts")
 
 
 def _run_wait_flow(
@@ -730,8 +756,9 @@ def _run_wait_flow(
 
     card, artifact = _fetch_optional_artifact(client, state.job_ids, artifact_name, output_dir)
     artifact_paths = dict(state.artifact_paths)
-    if artifact.get("path"):
-        artifact_paths[str(artifact_name)] = str(artifact["path"])
+    for artifact_path_name, artifact_path in _artifact_paths_from_result(artifact).items():
+        artifact_paths[artifact_path_name] = artifact_path
+    if artifact_paths != state.artifact_paths:
         save_run_state(
             RunState(
                 client_run_id=state.client_run_id,
@@ -765,6 +792,16 @@ def _run_wait_flow(
     }
 
 
+def _artifact_paths_from_result(artifact: Mapping[str, Any]) -> dict[str, str]:
+    paths: dict[str, str] = {}
+    if artifact.get("name") and artifact.get("path"):
+        paths[str(artifact["name"])] = str(artifact["path"])
+    for item in artifact.get("image_artifacts") or []:
+        if isinstance(item, Mapping) and item.get("name") and item.get("path"):
+            paths[str(item["name"])] = str(item["path"])
+    return paths
+
+
 def _fetch_optional_artifact(
     client: ApiClient,
     job_ids: list[str],
@@ -776,15 +813,23 @@ def _fetch_optional_artifact(
     errors = []
     for job_id in job_ids:
         try:
-            card = client.artifact(job_id, artifact_name)
+            download = client.artifact_download(job_id, artifact_name)
+            card = _artifact_value_for_mcp(download, artifact_name)
             artifact: dict[str, Any] = {
                 "name": artifact_name,
                 "job_id": job_id,
                 "status": "available",
+                **_download_metadata(download),
             }
-            saved_path = _save_json_artifact(output_dir, artifact_name, card)
+            saved_path = _save_downloaded_artifact(output_dir, artifact_name, download)
             if saved_path:
                 artifact["path"] = saved_path
+            if isinstance(card, Mapping):
+                image_artifacts, image_errors = _fetch_card_image_artifacts(client, job_id, card, output_dir)
+                if image_artifacts:
+                    artifact["image_artifacts"] = image_artifacts
+                if image_errors:
+                    artifact["image_errors"] = image_errors
             return card, artifact
         except ApiError as exc:
             if exc.status not in (404, 410):
@@ -803,14 +848,103 @@ def _fetch_optional_artifact(
     return None, artifact
 
 
-def _save_json_artifact(output_dir: str | None, name: str, payload: Any) -> str | None:
+def _fetch_card_image_artifacts(
+    client: ApiClient,
+    job_id: str,
+    card: Mapping[str, Any],
+    output_dir: str | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if not output_dir:
+        return [], []
+    artifacts: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    for image_name in _extract_image_artifact_names(card):
+        try:
+            download = client.artifact_download(job_id, image_name)
+            saved_path = _save_downloaded_artifact(output_dir, image_name, download)
+            item = {
+                "name": image_name,
+                "job_id": job_id,
+                "status": "available",
+                **_download_metadata(download),
+            }
+            if saved_path:
+                item["path"] = saved_path
+            artifacts.append(item)
+        except ApiError as exc:
+            errors.append(
+                {
+                    "job_id": job_id,
+                    "name": image_name,
+                    "status": exc.status,
+                    "message": "Image artifact could not be saved.",
+                    "detail": str(exc),
+                }
+            )
+    return artifacts, errors
+
+
+def _extract_image_artifact_names(payload: Any) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def consider(value: Any) -> None:
+        if not isinstance(value, str):
+            return
+        parsed = urlsplit(value)
+        candidate = Path(parsed.path).name if parsed.path else value.strip()
+        if not candidate:
+            return
+        if Path(candidate).suffix.lower() not in IMAGE_ARTIFACT_EXTENSIONS:
+            return
+        try:
+            _validate_artifact_name(candidate)
+        except ToolInputError:
+            return
+        if candidate not in seen:
+            seen.add(candidate)
+            names.append(candidate)
+
+    def walk(value: Any) -> None:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                consider(key)
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+        else:
+            consider(value)
+
+    walk(payload)
+    return names
+
+
+def _download_metadata(download: ArtifactDownload) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "bytes": download.size,
+        "sha256": download.sha256,
+    }
+    if download.content_type:
+        metadata["content_type"] = download.content_type
+    return metadata
+
+
+def _artifact_value_for_mcp(download: ArtifactDownload, name: str) -> Any:
+    try:
+        return download.json_or_text(name)
+    except UnicodeDecodeError:
+        return download.body
+
+
+def _save_downloaded_artifact(output_dir: str | None, name: str, download: ArtifactDownload) -> str | None:
     if not output_dir:
         return None
     _validate_artifact_name(name)
     path = Path(output_dir)
     path.mkdir(parents=True, exist_ok=True)
     artifact_path = path / name
-    artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    artifact_path.write_bytes(download.body)
     return str(artifact_path)
 
 

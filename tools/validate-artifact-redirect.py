@@ -45,9 +45,14 @@ class RecordingHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        body = json.dumps({"ok": True, "source": "artifact-store"}).encode("utf-8")
+        if self.path == "/plot.png":
+            body = b"\x89PNG\r\n\x1a\nfactor-mining-demo"
+            content_type = "image/png"
+        else:
+            body = json.dumps({"ok": True, "source": "artifact-store"}).encode("utf-8")
+            content_type = "application/json"
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -76,6 +81,17 @@ def main() -> int:
         assert payload == {"ok": True, "source": "artifact-store"}, payload
         assert api.requests == [{"path": expected_path, "authorization": "Bearer validation-secret"}], api.requests
         assert artifact_store.requests == [{"path": "/artifact.json", "authorization": None}], artifact_store.requests
+
+        api.requests.clear()
+        artifact_store.requests.clear()
+        binary_body = b"\x89PNG\r\n\x1a\nfactor-mining-demo"
+        api.target_url = f"http://127.0.0.1:{artifact_store.server_port}/plot.png"
+        download = client.artifact_download("job-1", "default_cs_nav_curves.png")
+        expected_png_path = f"/jobs/{quote('job-1', safe='')}/files/{quote('default_cs_nav_curves.png', safe='')}"
+        assert download.body == binary_body, download
+        assert download.content_type == "image/png", download
+        assert api.requests == [{"path": expected_png_path, "authorization": "Bearer validation-secret"}], api.requests
+        assert artifact_store.requests == [{"path": "/plot.png", "authorization": None}], artifact_store.requests
     finally:
         api.shutdown()
         artifact_store.shutdown()
