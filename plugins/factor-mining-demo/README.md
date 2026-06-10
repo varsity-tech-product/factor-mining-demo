@@ -7,8 +7,9 @@ same Factor Mining Demo MCP tool names.
 Key entry happens through a local browser setup page opened by
 `factor_mining_demo_setup_browser`. Do not paste the key into chat.
 
-MCP startup requires a `python` executable available to the host process. The
-committed launcher starts the bundled server with that interpreter.
+MCP startup requires Python. Codex and Claude Code use the bundled plugin
+manifests; the OpenClaw installer configures an absolute `python3` path so the
+gateway/node host does not depend on shell startup files.
 
 ## MCP Tools
 
