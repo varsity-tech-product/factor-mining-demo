@@ -20,6 +20,16 @@ if str(MCP_ROOT) not in sys.path:
     sys.path.insert(0, str(MCP_ROOT))
 
 from factor_mining_agent_lib.api import ApiClient, ApiError
+from factor_mining_agent_lib.batch import (
+    batch_results,
+    batch_status,
+    cancel_batch,
+    create_batch,
+    next_attempt_packet,
+    prepare_attempt_upload,
+    record_attempt_error,
+    record_attempt_result,
+)
 from factor_mining_agent_lib.browser_setup import _setup_page, _success_page
 from factor_mining_agent_lib.config import (
     AgentConfig,
@@ -337,6 +347,97 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         },
     },
     {
+        "name": "factor_mining_demo_batch_start",
+        "description": "Start a serial Factor Mining batch with isolated local attempt state.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["count", "mode"],
+            "properties": {
+                "count": {"type": "integer", "minimum": 1, "maximum": 50},
+                "mode": {"type": "string", "enum": ["public_task", "custom_idea"]},
+                "task_id": {"type": "string"},
+                "idea": {"type": "string"},
+                "task_payload": {"type": "object"},
+                "fwd_period": {"type": "integer"},
+                "position_mode": {"type": "string"},
+                "diversity_goal": {"type": "string"},
+                "home": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "factor_mining_demo_batch_next",
+        "description": "Return the next isolated attempt packet for a serial Factor Mining batch.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["batch_id"],
+            "properties": {
+                "batch_id": {"type": "string"},
+                "home": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "factor_mining_demo_batch_upload_backtest_wait",
+        "description": "Submit the current batch attempt plugin.py through the guarded serial batch workflow.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["batch_id", "attempt_id", "session_id", "plugin_path"],
+            "properties": {
+                "batch_id": {"type": "string"},
+                "attempt_id": {"type": "string"},
+                "session_id": {"type": "string"},
+                "plugin_path": {"type": "string"},
+                "poll_interval": {"type": "number"},
+                "timeout": {"type": "number"},
+                "artifact_name": {"type": "string"},
+                "home": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "factor_mining_demo_batch_status",
+        "description": "Return sanitized local status counts for a serial Factor Mining batch.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["batch_id"],
+            "properties": {
+                "batch_id": {"type": "string"},
+                "home": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "factor_mining_demo_batch_results",
+        "description": "Return a sanitized final summary for a serial Factor Mining batch.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["batch_id"],
+            "properties": {
+                "batch_id": {"type": "string"},
+                "home": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "factor_mining_demo_batch_cancel",
+        "description": "Mark pending and active local attempts in a serial Factor Mining batch as cancelled.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["batch_id"],
+            "properties": {
+                "batch_id": {"type": "string"},
+                "home": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "factor_mining_demo_clear_config",
         "description": "Remove the local direct vt_ Agent API Key configuration so the user can switch keys.",
         "inputSchema": {
@@ -378,6 +479,18 @@ def call_tool(name: str, arguments: Mapping[str, Any] | None = None, *, opener: 
         return _get_job(args, opener=opener, env=env)
     if name == "factor_mining_demo_get_artifact":
         return _get_artifact(args, opener=opener, env=env)
+    if name == "factor_mining_demo_batch_start":
+        return _batch_start(args, opener=opener, env=env)
+    if name == "factor_mining_demo_batch_next":
+        return _batch_next(args, env=env)
+    if name == "factor_mining_demo_batch_upload_backtest_wait":
+        return _batch_upload_backtest_wait(args, opener=opener, env=env)
+    if name == "factor_mining_demo_batch_status":
+        return _batch_status(args, env=env)
+    if name == "factor_mining_demo_batch_results":
+        return _batch_results(args, env=env)
+    if name == "factor_mining_demo_batch_cancel":
+        return _batch_cancel(args, env=env)
     if name == "factor_mining_demo_clear_config":
         return _clear_config(args, env=env)
     raise ToolInputError(f"Unknown Factor Mining Demo MCP tool: {name}")
@@ -650,6 +763,96 @@ def _get_artifact(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str
     if saved_path:
         result["path"] = saved_path
     return _redact_payload(result)
+
+
+def _batch_start(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] | None) -> Any:
+    if "count" not in args:
+        raise ToolInputError("count is required")
+    task_payload = args.get("task_payload")
+    if task_payload is not None and not isinstance(task_payload, Mapping):
+        raise ToolInputError("task_payload must be a JSON object")
+    _client_from_config(args, opener=opener, env=env)
+    return create_batch(
+        count=args["count"],
+        mode=_required_string(args, "mode"),
+        task_id=_optional_string(args, "task_id"),
+        idea=_optional_string(args, "idea"),
+        task_payload=task_payload,
+        fwd_period=int(args.get("fwd_period") or 7),
+        position_mode=str(args.get("position_mode") or "both"),
+        diversity_goal=_optional_string(args, "diversity_goal"),
+        home=_configured_home(args, env),
+    )
+
+
+def _batch_next(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> Any:
+    return next_attempt_packet(_required_string(args, "batch_id"), home=_configured_home(args, env))
+
+
+def _batch_upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] | None) -> Any:
+    home = _configured_home(args, env)
+    batch_id = _required_string(args, "batch_id")
+    attempt_id = _required_string(args, "attempt_id")
+    session_id = _required_string(args, "session_id")
+    artifact_name = _optional_string(args, "artifact_name") or "default_factor_card.json"
+    _validate_artifact_name(artifact_name)
+
+    prepared = prepare_attempt_upload(
+        batch_id=batch_id,
+        attempt_id=attempt_id,
+        session_id=session_id,
+        plugin_path=_required_string(args, "plugin_path"),
+        home=home,
+    )
+    metadata_dict: dict[str, Any] = {}
+    try:
+        metadata = parse_plugin_metadata(prepared.plugin_path)
+        metadata_dict = metadata.to_dict()
+        result = _upload_backtest_wait(
+            {
+                "session_id": session_id,
+                "plugin_path": str(prepared.plugin_path),
+                "client_run_id": prepared.client_run_id,
+                "position_mode": prepared.position_mode,
+                "fwd_period": prepared.fwd_period,
+                "wait": True,
+                "poll_interval": args.get("poll_interval"),
+                "timeout": args.get("timeout"),
+                "artifact_name": artifact_name,
+                "output_dir": str(prepared.output_dir),
+                "home": home,
+            },
+            opener=opener,
+            env=env,
+        )
+    except Exception as exc:
+        return record_attempt_error(
+            batch_id=batch_id,
+            attempt_id=attempt_id,
+            error=redact_text(str(exc)),
+            metadata=metadata_dict,
+            home=home,
+        )
+
+    return record_attempt_result(
+        batch_id=batch_id,
+        attempt_id=attempt_id,
+        result=result,
+        metadata=metadata_dict,
+        home=home,
+    )
+
+
+def _batch_status(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> Any:
+    return batch_status(_required_string(args, "batch_id"), home=_configured_home(args, env))
+
+
+def _batch_results(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> Any:
+    return batch_results(_required_string(args, "batch_id"), home=_configured_home(args, env))
+
+
+def _batch_cancel(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> Any:
+    return cancel_batch(_required_string(args, "batch_id"), home=_configured_home(args, env))
 
 
 def _client_from_config(

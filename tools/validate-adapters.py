@@ -23,6 +23,15 @@ REQUIRED_TOOLS = {
     "factor_mining_demo_get_workflow",
     "factor_mining_demo_get_job",
     "factor_mining_demo_get_artifact",
+    "factor_mining_demo_clear_config",
+}
+BATCH_TOOLS = {
+    "factor_mining_demo_batch_start",
+    "factor_mining_demo_batch_next",
+    "factor_mining_demo_batch_upload_backtest_wait",
+    "factor_mining_demo_batch_status",
+    "factor_mining_demo_batch_results",
+    "factor_mining_demo_batch_cancel",
 }
 
 
@@ -74,6 +83,7 @@ PRODUCT_FACING_FILES = [
     PLUGIN / ".codex-plugin" / "plugin.json",
     PLUGIN / ".claude-plugin" / "plugin.json",
     PLUGIN / "skills" / "factor-mining-demo" / "SKILL.md",
+    PLUGIN / "skills" / "factor-mining-demo-batch" / "SKILL.md",
     MCP_ROOT / "factor_mining_agent_lib" / "browser_setup.py",
     MCP_ROOT / "factor_mining_agent_lib" / "__init__.py",
 ]
@@ -83,6 +93,7 @@ PACKAGE_DOC_FILES = [
     PLUGIN / ".codex-plugin" / "plugin.json",
     PLUGIN / ".claude-plugin" / "plugin.json",
     PLUGIN / "skills" / "factor-mining-demo" / "SKILL.md",
+    PLUGIN / "skills" / "factor-mining-demo-batch" / "SKILL.md",
     MCP_ROOT / "factor_mining_agent_lib" / "browser_setup.py",
     MCP_ROOT / "factor_mining_agent_lib" / "__init__.py",
 ]
@@ -128,6 +139,7 @@ def main() -> None:
     require(PLUGIN / ".claude-plugin" / "plugin.json")
     require(PLUGIN / ".mcp.json")
     require(PLUGIN / "skills" / "factor-mining-demo" / "SKILL.md")
+    require(PLUGIN / "skills" / "factor-mining-demo-batch" / "SKILL.md")
     require(MCP_ROOT / "launch.py")
     require(MCP_ROOT / "server.py")
     require_no_product_forbidden_text()
@@ -166,6 +178,9 @@ def main() -> None:
     missing = REQUIRED_TOOLS.difference(mcp_server.list_tool_names())
     if missing:
         raise AssertionError(f"missing MCP tools: {sorted(missing)}")
+    missing_batch = BATCH_TOOLS.difference(mcp_server.list_tool_names())
+    if missing_batch:
+        raise AssertionError(f"missing batch MCP tools: {sorted(missing_batch)}")
 
     print("packaging validation passed")
 

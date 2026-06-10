@@ -18,6 +18,12 @@ The product surface is the MCP tool set:
 - `factor_mining_demo_get_workflow`
 - `factor_mining_demo_get_job`
 - `factor_mining_demo_get_artifact`
+- `factor_mining_demo_batch_start`
+- `factor_mining_demo_batch_next`
+- `factor_mining_demo_batch_upload_backtest_wait`
+- `factor_mining_demo_batch_status`
+- `factor_mining_demo_batch_results`
+- `factor_mining_demo_batch_cancel`
 - `factor_mining_demo_clear_config`
 
 Key entry happens through the local browser setup page returned by the MCP
@@ -117,13 +123,29 @@ under `~/.factor-mining-demo/` is preserved.
 ```text
 Use Factor Mining Demo. Verify status, then show me the public task list.
 Use Factor Mining Demo with my custom factor idea.
+Use Factor Mining Demo to mine 5 distinct factors for one public task.
 Use Factor Mining Demo to resume my run and summarize results.
 ```
+
+## Batch Mode
+
+Batch mode mines multiple factors serially. Each attempt gets its own MCP-managed
+state and file area, and the batch MCP tools return only the current attempt
+packet plus coarse diversity hints.
+
+```text
+Use Factor Mining Demo to mine 10 distinct factors for a public task.
+Use Factor Mining Demo to mine 4 custom factors from my idea.
+```
+
+Batch mode provides MCP state, file, and information-flow isolation between
+attempts. It does not guarantee host-level isolated model context.
 
 ## Local State
 
 Configuration is stored under `~/.factor-mining-demo/`. Run state is stored
-under `~/.factor-mining-demo/runs/`.
+under `~/.factor-mining-demo/runs/`. Batch state is stored under
+`~/.factor-mining-demo/batches/`.
 
 ## License
 

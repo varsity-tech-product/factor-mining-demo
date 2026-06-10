@@ -25,7 +25,23 @@ gateway/node host does not depend on shell startup files.
 - `factor_mining_demo_get_workflow`
 - `factor_mining_demo_get_job`
 - `factor_mining_demo_get_artifact`
+- `factor_mining_demo_batch_start`
+- `factor_mining_demo_batch_next`
+- `factor_mining_demo_batch_upload_backtest_wait`
+- `factor_mining_demo_batch_status`
+- `factor_mining_demo_batch_results`
+- `factor_mining_demo_batch_cancel`
 - `factor_mining_demo_clear_config`
 
 OpenClaw may display provider-prefixed tool names such as
 `fm-demo__factor_mining_demo_status`; those are the same bundled tools.
+
+## Serial Batch Mode
+
+Batch mode mines multiple factors serially through MCP tools. Each attempt gets
+its own local state and artifact area, `factor_mining_demo_batch_next` returns
+only the current attempt packet, and final summaries are sanitized through
+`factor_mining_demo_batch_results`.
+
+Batch mode provides MCP state, file, and information-flow isolation between
+attempts. It does not guarantee host-level isolated model context.
