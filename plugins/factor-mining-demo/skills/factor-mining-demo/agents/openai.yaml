@@ -1,0 +1,11 @@
+interface:
+  display_name: "Factor Mining Demo"
+  short_description: "Write, upload, and backtest Factor Mining Demo plugins"
+  default_prompt: "Use Factor Mining Demo to list public tasks or run a custom factor idea."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "fm-demo"
+      description: "Factor Mining Demo bundled MCP server"
+      transport: "stdio"
