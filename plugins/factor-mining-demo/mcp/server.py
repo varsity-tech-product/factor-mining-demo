@@ -19,12 +19,14 @@ MCP_ROOT = Path(__file__).resolve().parent
 if str(MCP_ROOT) not in sys.path:
     sys.path.insert(0, str(MCP_ROOT))
 
-from factor_mining_agent_lib.api import ApiClient, ApiError
+from factor_mining_agent_lib.api import AgentStatusError, ApiClient, ApiError
 from factor_mining_agent_lib.batch import (
+    BatchError,
     batch_results,
     batch_status,
     cancel_batch,
     create_batch,
+    mark_attempt_system_error,
     next_attempt_packet,
     prepare_attempt_upload,
     record_attempt_error,
@@ -40,7 +42,7 @@ from factor_mining_agent_lib.config import (
     load_config,
     save_config,
 )
-from factor_mining_agent_lib.metadata import parse_plugin_metadata
+from factor_mining_agent_lib.metadata import MetadataError, parse_plugin_metadata
 from factor_mining_agent_lib.redaction import redact_text
 from factor_mining_agent_lib.run_state import RunState, load_run_state, save_run_state
 from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_factor_card, terminal_outcome
@@ -797,15 +799,15 @@ def _batch_upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Ma
     artifact_name = _optional_string(args, "artifact_name") or "default_factor_card.json"
     _validate_artifact_name(artifact_name)
 
-    prepared = prepare_attempt_upload(
-        batch_id=batch_id,
-        attempt_id=attempt_id,
-        session_id=session_id,
-        plugin_path=_required_string(args, "plugin_path"),
-        home=home,
-    )
     metadata_dict: dict[str, Any] = {}
     try:
+        prepared = prepare_attempt_upload(
+            batch_id=batch_id,
+            attempt_id=attempt_id,
+            session_id=session_id,
+            plugin_path=_required_string(args, "plugin_path"),
+            home=home,
+        )
         metadata = parse_plugin_metadata(prepared.plugin_path)
         metadata_dict = metadata.to_dict()
         result = _upload_backtest_wait(
@@ -825,12 +827,26 @@ def _batch_upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Ma
             opener=opener,
             env=env,
         )
-    except Exception as exc:
+    except (BatchError, MetadataError) as exc:
         return record_attempt_error(
             batch_id=batch_id,
             attempt_id=attempt_id,
             error=redact_text(str(exc)),
             metadata=metadata_dict,
+            home=home,
+        )
+    except (MissingCredentialError, ConfigError, AgentStatusError, ApiError, McpServerError) as exc:
+        return mark_attempt_system_error(
+            batch_id=batch_id,
+            attempt_id=attempt_id,
+            error=redact_text(str(exc)),
+            home=home,
+        )
+    except Exception as exc:
+        return mark_attempt_system_error(
+            batch_id=batch_id,
+            attempt_id=attempt_id,
+            error=redact_text(str(exc)),
             home=home,
         )
 

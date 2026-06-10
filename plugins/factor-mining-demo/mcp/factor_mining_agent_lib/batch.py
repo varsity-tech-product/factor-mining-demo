@@ -20,6 +20,7 @@ ATTEMPT_ID_RE = re.compile(r"^[0-9]{3}$")
 URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 ABSOLUTE_PATH_RE = re.compile(r"(?<!:)\/(?:[A-Za-z0-9._ -]+\/)+[A-Za-z0-9._ -]*")
 TERMINAL_ATTEMPT_STATUSES = {"succeeded", "failed", "cancelled"}
+BLOCKED_BATCH_STATUSES = {"blocked", "system_error"}
 PUBLIC_DROP_KEYS = {
     "attempt_dir",
     "authorization",
@@ -219,6 +220,7 @@ def prepare_attempt_upload(
     output_dir = _resolve_output_dir(attempt)
 
     now = _now()
+    _clear_system_error(state)
     attempt["status"] = "submitted"
     attempt["session_id"] = session_id
     attempt["started_at"] = attempt.get("started_at") or now
@@ -247,6 +249,7 @@ def record_attempt_result(
 ) -> dict[str, Any]:
     state = load_batch_state(batch_id, home=home)
     attempt = _find_attempt(state, attempt_id)
+    _clear_system_error(state)
     summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
     status = _attempt_status_from_result(result)
     metrics = summary.get("metrics") if isinstance(summary.get("metrics"), Mapping) else {}
@@ -282,6 +285,7 @@ def record_attempt_error(
 ) -> dict[str, Any]:
     state = load_batch_state(batch_id, home=home)
     attempt = _find_attempt(state, attempt_id)
+    _clear_system_error(state)
     metadata = metadata or {}
     factor_name = _clean_optional_string(metadata.get("factor_name"))
     factor_type = _clean_optional_string(metadata.get("factor_type"))
@@ -304,6 +308,40 @@ def record_attempt_error(
     return compact_attempt_result(state, attempt)
 
 
+def mark_attempt_system_error(
+    *,
+    batch_id: str,
+    attempt_id: str,
+    error: str,
+    home: str | Path | None = None,
+) -> dict[str, Any]:
+    state = load_batch_state(batch_id, home=home)
+    attempt = _find_attempt(state, attempt_id)
+    sanitized = _sanitize_error(error, state=state)
+    if attempt.get("status") in {"submitted", "blocked", "system_error"}:
+        attempt["status"] = "active"
+    elif attempt.get("status") == "pending":
+        attempt["status"] = "active"
+        attempt["started_at"] = attempt.get("started_at") or _now()
+    attempt["system_error"] = sanitized
+    attempt["completed_at"] = None
+    state["status"] = "blocked"
+    state["system_error"] = sanitized
+    state["current_attempt_index"] = attempt.get("index")
+    state["updated_at"] = _now()
+    save_batch_state(state, home=home)
+    return {
+        "ok": False,
+        "batch_id": state["batch_id"],
+        "attempt_id": attempt["attempt_id"],
+        "index": attempt.get("index"),
+        "count": state.get("count"),
+        "status": "blocked",
+        "error": sanitized,
+        "next_action": _blocked_next_action(state),
+    }
+
+
 def batch_status(batch_id: str, *, home: str | Path | None = None) -> dict[str, Any]:
     state = load_batch_state(batch_id, home=home)
     _refresh_batch_status(state)
@@ -320,6 +358,8 @@ def batch_status(batch_id: str, *, home: str | Path | None = None) -> dict[str, 
     }
     if active is not None:
         result["active_attempt"] = {"index": active["index"], "status": active["status"]}
+    if state.get("system_error"):
+        result["system_error"] = _sanitize_error(str(state["system_error"]), state=state)
     return result
 
 
@@ -418,6 +458,10 @@ def _attempt_packet(state: Mapping[str, Any], attempt: Mapping[str, Any]) -> dic
         "diversity_hints": _diversity_hints(state),
         "next_action": "Write only this attempt's plugin.py, then submit it with factor_mining_demo_batch_upload_backtest_wait.",
     }
+    if state.get("status") in BLOCKED_BATCH_STATUSES:
+        packet["status"] = state.get("status")
+        packet["system_error"] = _sanitize_error(str(state.get("system_error") or ""), state=state)
+        packet["next_action"] = _blocked_next_action(state)
     if state["mode"] == "public_task":
         packet["task_id"] = state.get("task_id")
     else:
@@ -593,6 +637,8 @@ def _redact_state_value(value: Any) -> Any:
 def _refresh_batch_status(state: dict[str, Any]) -> None:
     if state.get("status") == "cancelled":
         return
+    if state.get("status") in BLOCKED_BATCH_STATUSES and state.get("system_error"):
+        return
     attempts = list(state.get("attempts") or [])
     statuses = {str(attempt.get("status")) for attempt in attempts}
     if statuses & {"active", "submitted"}:
@@ -621,11 +667,26 @@ def _counts(state: Mapping[str, Any]) -> dict[str, int]:
 def _next_action(state: Mapping[str, Any]) -> str:
     if state.get("status") == "cancelled":
         return "Call factor_mining_demo_batch_results for the sanitized summary."
+    if state.get("status") in BLOCKED_BATCH_STATUSES and state.get("system_error"):
+        return _blocked_next_action(state)
     if _first_attempt_with_status(state, "active") or _first_attempt_with_status(state, "submitted"):
         return "Complete the active attempt with factor_mining_demo_batch_upload_backtest_wait."
     if _first_attempt_with_status(state, "pending"):
         return "Call factor_mining_demo_batch_next for the next isolated attempt packet."
     return "Call factor_mining_demo_batch_results for the sanitized summary."
+
+
+def _blocked_next_action(state: Mapping[str, Any]) -> str:
+    return "Retry the current attempt after fixing setup, authentication, network, or backend availability."
+
+
+def _clear_system_error(state: dict[str, Any]) -> None:
+    state.pop("system_error", None)
+    if state.get("status") in BLOCKED_BATCH_STATUSES:
+        state["status"] = "running"
+    for attempt in state.get("attempts") or []:
+        if isinstance(attempt, dict):
+            attempt.pop("system_error", None)
 
 
 def _ordered_attempts(state: Mapping[str, Any]) -> list[dict[str, Any]]:

@@ -123,7 +123,7 @@ under `~/.factor-mining-demo/` is preserved.
 ```text
 Use Factor Mining Demo. Verify status, then show me the public task list.
 Use Factor Mining Demo with my custom factor idea.
-Use Factor Mining Demo to mine 5 distinct factors for one public task.
+Use Factor Mining Demo to mine 5 distinct factors from the public task list.
 Use Factor Mining Demo to resume my run and summarize results.
 ```
 
@@ -134,7 +134,7 @@ state and file area, and the batch MCP tools return only the current attempt
 packet plus coarse diversity hints.
 
 ```text
-Use Factor Mining Demo to mine 10 distinct factors for a public task.
+Use Factor Mining Demo to mine 10 distinct factors from the public task list.
 Use Factor Mining Demo to mine 4 custom factors from my idea.
 ```
 

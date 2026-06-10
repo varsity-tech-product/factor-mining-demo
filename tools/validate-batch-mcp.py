@@ -18,6 +18,7 @@ import server as mcp_server
 from factor_mining_agent_lib.config import AgentConfig, save_config
 
 
+SKILL_PATH = ROOT / "plugins" / "factor-mining-demo" / "skills" / "factor-mining-demo-batch" / "SKILL.md"
 OLD_TOOLS = {
     "factor_mining_demo_status",
     "factor_mining_demo_setup_browser",
@@ -74,6 +75,16 @@ class FakeApiClient:
         return {"status": "ok", "agent_key": "valid"}
 
 
+class NetworkFailingApiClient(FakeApiClient):
+    def upload_plugin(self, **kwargs: Any) -> dict[str, Any]:
+        raise mcp_server.ApiError(
+            "Factor Mining API request could not connect: validation network failure",
+            method="POST",
+            url="https://example.invalid/sessions/session-1/plugins/upload?token=secret",
+            api_key="vt_validation_secret_123456789",
+        )
+
+
 def _tool_schema(name: str) -> dict[str, Any]:
     for tool in mcp_server.TOOL_DEFINITIONS:
         if tool["name"] == name:
@@ -99,6 +110,31 @@ def _assert_private(path: Path) -> None:
     mode = stat.S_IMODE(path.stat().st_mode)
     if mode & (stat.S_IRWXG | stat.S_IRWXO):
         raise AssertionError(f"{path.name} should be owner-only, got {oct(mode)}")
+
+
+def _save_validation_config(home: Path) -> None:
+    save_config(
+        AgentConfig(
+            base_url="https://example.invalid",
+            api_key="vt_validation_secret_123456789",
+            agent_status={"status": "ok", "agent_key": "valid"},
+        ),
+        home=home,
+    )
+
+
+def _write_valid_plugin(path: str | Path) -> None:
+    Path(path).write_text(
+        "\n".join(
+            [
+                'FACTOR_TYPE = "validation_momentum"',
+                'FACTOR_NAME = "Validation Momentum"',
+                'FACTOR_DEFAULT_PARAMS = {"window": 7}',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_tools_and_existing_schema() -> None:
@@ -129,20 +165,44 @@ def test_status_without_config_returns_setup_required() -> None:
     assert result["setup_required"] is True
 
 
+def test_public_task_batch_start_requires_task_id_helpfully() -> None:
+    original_client = mcp_server.ApiClient
+    mcp_server.ApiClient = FakeApiClient
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            _save_validation_config(home)
+            try:
+                mcp_server.call_tool(
+                    "factor_mining_demo_batch_start",
+                    {"count": 2, "mode": "public_task", "home": str(home)},
+                )
+            except Exception as exc:
+                message = str(exc)
+                assert "task_id" in message
+                assert "public_task" in message
+            else:
+                raise AssertionError("public_task batch_start without task_id was accepted")
+    finally:
+        mcp_server.ApiClient = original_client
+
+
+def test_batch_skill_public_task_flow_lists_tasks_before_start() -> None:
+    text = SKILL_PATH.read_text(encoding="utf-8")
+    public_section_start = text.index("For public task mode")
+    public_section = text[public_section_start:]
+    list_index = public_section.index("factor_mining_demo_list_public_tasks")
+    start_index = public_section.index("factor_mining_demo_batch_start")
+    assert list_index < start_index
+
+
 def test_batch_isolation_and_sanitization() -> None:
     original_client = mcp_server.ApiClient
     mcp_server.ApiClient = FakeApiClient
     try:
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)
-            save_config(
-                AgentConfig(
-                    base_url="https://example.invalid",
-                    api_key="vt_validation_secret_123456789",
-                    agent_status={"status": "ok", "agent_key": "valid"},
-                ),
-                home=home,
-            )
+            _save_validation_config(home)
             start = mcp_server.call_tool(
                 "factor_mining_demo_batch_start",
                 {
@@ -179,21 +239,19 @@ def test_batch_isolation_and_sanitization() -> None:
 
             outside = home / "outside.py"
             outside.write_text("FACTOR_TYPE='x'\nFACTOR_NAME='x'\nFACTOR_DEFAULT_PARAMS={}\n", encoding="utf-8")
-            try:
-                mcp_server.call_tool(
-                    "factor_mining_demo_batch_upload_backtest_wait",
-                    {
-                        "batch_id": batch_id,
-                        "attempt_id": first["attempt_id"],
-                        "session_id": "session-1",
-                        "plugin_path": str(outside),
-                        "home": str(home),
-                    },
-                )
-            except Exception as exc:
-                assert "current attempt" in str(exc) or "attempt directory" in str(exc)
-            else:
-                raise AssertionError("outside plugin_path was accepted")
+            outside_result = mcp_server.call_tool(
+                "factor_mining_demo_batch_upload_backtest_wait",
+                {
+                    "batch_id": batch_id,
+                    "attempt_id": first["attempt_id"],
+                    "session_id": "session-1",
+                    "plugin_path": str(outside),
+                    "home": str(home),
+                },
+            )
+            assert outside_result["ok"] is False
+            assert outside_result["status"] == "failed"
+            assert "current attempt" in json.dumps(outside_result) or "attempt directory" in json.dumps(outside_result)
 
             submitted = _read_batch(home, batch_id)
             submitted["status"] = "running"
@@ -237,10 +295,71 @@ def test_batch_isolation_and_sanitization() -> None:
         mcp_server.ApiClient = original_client
 
 
+def test_batch_upload_network_failure_blocks_without_failed_attempt_or_advancing() -> None:
+    original_client = mcp_server.ApiClient
+    mcp_server.ApiClient = NetworkFailingApiClient
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            _save_validation_config(home)
+            start = mcp_server.call_tool(
+                "factor_mining_demo_batch_start",
+                {
+                    "count": 2,
+                    "mode": "custom_idea",
+                    "idea": "Validate network blocker handling.",
+                    "task_payload": TASK_PAYLOAD,
+                    "home": str(home),
+                },
+            )
+            batch_id = start["batch_id"]
+            first = mcp_server.call_tool("factor_mining_demo_batch_next", {"batch_id": batch_id, "home": str(home)})
+            _write_valid_plugin(first["plugin_path"])
+
+            result = mcp_server.call_tool(
+                "factor_mining_demo_batch_upload_backtest_wait",
+                {
+                    "batch_id": batch_id,
+                    "attempt_id": first["attempt_id"],
+                    "session_id": "session-1",
+                    "plugin_path": first["plugin_path"],
+                    "home": str(home),
+                },
+            )
+            assert result["ok"] is False
+            assert result["status"] in {"blocked", "system_error"}
+            assert "retry" in result["next_action"].lower() or "setup" in result["next_action"].lower()
+
+            state = _read_batch(home, batch_id)
+            assert state["status"] in {"blocked", "system_error"}
+            assert state["attempts"][0]["status"] in {"active", "blocked", "system_error"}
+            assert state["attempts"][0]["status"] != "failed"
+            assert state["attempts"][1]["status"] == "pending"
+
+            status = mcp_server.call_tool("factor_mining_demo_batch_status", {"batch_id": batch_id, "home": str(home)})
+            status_rendered = json.dumps(status).lower()
+            assert status["status"] in {"blocked", "system_error"}
+            assert "retry" in status_rendered or "setup" in status_rendered
+            assert "next isolated attempt" not in status_rendered
+
+            still_current = mcp_server.call_tool(
+                "factor_mining_demo_batch_next",
+                {"batch_id": batch_id, "home": str(home)},
+            )
+            assert still_current["index"] == 1
+            after_next = _read_batch(home, batch_id)
+            assert after_next["attempts"][1]["status"] == "pending"
+    finally:
+        mcp_server.ApiClient = original_client
+
+
 def main() -> int:
     test_tools_and_existing_schema()
     test_status_without_config_returns_setup_required()
+    test_public_task_batch_start_requires_task_id_helpfully()
+    test_batch_skill_public_task_flow_lists_tasks_before_start()
     test_batch_isolation_and_sanitization()
+    test_batch_upload_network_failure_blocks_without_failed_attempt_or_advancing()
     print("batch MCP validation passed")
     return 0
 

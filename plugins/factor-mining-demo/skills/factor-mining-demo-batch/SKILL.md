@@ -17,20 +17,30 @@ Some hosts display bundled MCP tool names with a provider prefix, such as
 1. Call `factor_mining_demo_status`.
 2. If setup is required, call `factor_mining_demo_setup_browser` and tell the
    user to enter the direct vt_ Agent API Key in the local browser page.
-3. Start the serial batch with `factor_mining_demo_batch_start`.
-4. Call `factor_mining_demo_batch_next` to get the next isolated attempt
+3. Determine whether the user wants a public task batch or a custom idea batch.
+4. For public task mode, call `factor_mining_demo_list_public_tasks` before
+   `factor_mining_demo_batch_start` unless the user already provided a
+   `task_id`. Show concise task choices and ask the user to choose unless they
+   explicitly authorize the agent to choose. Call
+   `factor_mining_demo_batch_start` with the selected `task_id`.
+5. For custom idea mode, build an explicit `task_payload` before
+   `factor_mining_demo_batch_start`. The payload must include `task_id`,
+   `title`, `category`, `description`, non-empty `allowed_data`, and
+   `fwd_period`. Call `factor_mining_demo_batch_start` with `idea` and
+   `task_payload`.
+6. Call `factor_mining_demo_batch_next` to get the next isolated attempt
    packet.
-5. For that attempt, write only the current attempt's `plugin.py` at the
+7. For that attempt, write only the current attempt's `plugin.py` at the
    `plugin_path` returned by the MCP tool.
-6. Do not read sibling attempt directories. Do not reuse previous attempt
+8. Do not read sibling attempt directories. Do not reuse previous attempt
    implementation details.
-7. Use existing single-factor MCP tools for task/session/dedup/metadata
+9. Use existing single-factor MCP tools for task/session/dedup/metadata
    actions as needed.
-8. Submit with `factor_mining_demo_batch_upload_backtest_wait`, not the generic
+10. Submit with `factor_mining_demo_batch_upload_backtest_wait`, not the generic
    upload tool.
-9. Record and summarize each attempt only through batch MCP results.
-10. Repeat `factor_mining_demo_batch_next` until it returns `done=true`.
-11. Finish with `factor_mining_demo_batch_results`.
+11. Record and summarize each attempt only through batch MCP results.
+12. Repeat `factor_mining_demo_batch_next` until it returns `done=true`.
+13. Finish with `factor_mining_demo_batch_results`.
 
 ## Isolation Rules
 

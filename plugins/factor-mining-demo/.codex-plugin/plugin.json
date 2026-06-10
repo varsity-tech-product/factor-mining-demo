@@ -33,7 +33,7 @@
     "defaultPrompt": [
       "Show me the Factor Mining Demo public task list.",
       "Use Factor Mining Demo with my custom factor idea.",
-      "Use Factor Mining Demo to mine 5 distinct factors for one public task.",
+      "Use Factor Mining Demo to mine 5 distinct factors from the public task list.",
       "Switch Factor Mining Demo to a different vt_ key.",
       "Resume my Factor Mining Demo run and summarize results."
     ],
