@@ -7,7 +7,7 @@ import re
 import stat
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -515,12 +515,12 @@ def _rank_metric(metrics: Mapping[str, Any]) -> tuple[str, float] | None:
         value = normalized.get(name)
         if isinstance(value, bool):
             continue
-        if isinstance(value, int | float):
+        if isinstance(value, (int, float)):
             return name, float(value)
     for key, value in normalized.items():
         if isinstance(value, bool):
             continue
-        if isinstance(value, int | float):
+        if isinstance(value, (int, float)):
             return key, float(value)
     return None
 
@@ -802,7 +802,7 @@ def _clean_optional_string(value: Any) -> str | None:
 
 
 def _now() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _isolation_statement() -> str:
