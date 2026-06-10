@@ -35,12 +35,6 @@ codex plugin marketplace add varsity-tech-product/factor-mining-demo --ref main
 codex plugin add factor-mining-demo@factor-mining-demo-marketplace
 ```
 
-Or run:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-codex.sh | bash
-```
-
 ## Codex Desktop
 
 Use these fields in Codex Desktop:
@@ -49,12 +43,6 @@ Use these fields in Codex Desktop:
 Source: varsity-tech-product/factor-mining-demo
 Git ref: main
 Plugin: factor-mining-demo@factor-mining-demo-marketplace
-```
-
-You can also run:
-
-```bash
-./install-codex-desktop.sh
 ```
 
 ## Claude Code
@@ -91,6 +79,38 @@ openclaw gateway restart
 OpenClaw may display provider-prefixed tool names such as
 `fm-demo__factor_mining_demo_status`; use the Factor Mining Demo MCP tools shown
 above.
+
+## Update Existing Installations
+
+Codex CLI and Codex Desktop:
+
+```bash
+codex plugin marketplace upgrade factor-mining-demo-marketplace
+codex plugin remove factor-mining-demo@factor-mining-demo-marketplace
+codex plugin add factor-mining-demo@factor-mining-demo-marketplace
+```
+
+For Codex Desktop, fully quit and reopen the app after running the update
+commands, then start a new chat.
+
+Claude Code:
+
+```bash
+claude plugin marketplace update factor-mining-demo-marketplace
+claude plugin update factor-mining-demo@factor-mining-demo-marketplace
+claude mcp list
+```
+
+OpenClaw:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-demo/main/install-openclaw.sh | bash
+openclaw gateway restart
+openclaw node restart
+```
+
+Use a fresh agent session after updating. Existing Factor Mining configuration
+under `~/.factor-mining-demo/` is preserved.
 
 ## First Prompts
 

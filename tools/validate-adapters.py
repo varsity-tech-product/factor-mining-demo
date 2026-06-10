@@ -68,8 +68,6 @@ FORBIDDEN_PACKAGE_DOC_PATTERNS = {
 }
 PRODUCT_FACING_FILES = [
     ROOT / "README.md",
-    ROOT / "install-codex.sh",
-    ROOT / "install-codex-desktop.sh",
     ROOT / "install-openclaw.sh",
     PLUGIN / "README.md",
     PLUGIN / ".mcp.json",
@@ -135,6 +133,8 @@ def main() -> None:
     require_no_product_forbidden_text()
 
     require_absent(ROOT / ".codex-plugin")
+    require_absent(ROOT / _s("install-", "codex.sh"))
+    require_absent(ROOT / _s("install-", "codex-", "desktop.sh"))
     require_absent(ROOT / "scripts")
     require_absent(ROOT / "skills")
     require_absent(ROOT / "adapters" / "claude-code" / "factor-mining-demo" / "bin")
