@@ -84,6 +84,8 @@ PRODUCT_FACING_FILES = [
     PLUGIN / ".claude-plugin" / "plugin.json",
     PLUGIN / "skills" / "factor-mining-demo" / "SKILL.md",
     PLUGIN / "skills" / "factor-mining-demo-batch" / "SKILL.md",
+    PLUGIN / "skills" / "factor-mining-demo" / "agents" / "openai.yaml",
+    PLUGIN / "skills" / "factor-mining-demo-batch" / "agents" / "openai.yaml",
     MCP_ROOT / "factor_mining_agent_lib" / "browser_setup.py",
     MCP_ROOT / "factor_mining_agent_lib" / "__init__.py",
 ]
@@ -102,6 +104,19 @@ PACKAGE_DOC_FILES = [
 def load_json(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def load_openai_skill_dependency(path: Path) -> dict[str, str]:
+    text = path.read_text(encoding="utf-8")
+    required_lines = {
+        "type": '    - type: "mcp"',
+        "value": '      value: "fm-demo"',
+        "transport": '      transport: "stdio"',
+    }
+    missing = [key for key, line in required_lines.items() if line not in text]
+    if missing:
+        raise AssertionError(f"{path.relative_to(ROOT)} missing OpenAI MCP dependency fields: {missing}")
+    return {"type": "mcp", "value": "fm-demo", "transport": "stdio"}
 
 
 def require(path: Path) -> None:
@@ -140,6 +155,8 @@ def main() -> None:
     require(PLUGIN / ".mcp.json")
     require(PLUGIN / "skills" / "factor-mining-demo" / "SKILL.md")
     require(PLUGIN / "skills" / "factor-mining-demo-batch" / "SKILL.md")
+    require(PLUGIN / "skills" / "factor-mining-demo" / "agents" / "openai.yaml")
+    require(PLUGIN / "skills" / "factor-mining-demo-batch" / "agents" / "openai.yaml")
     require(MCP_ROOT / "launch.py")
     require(MCP_ROOT / "server.py")
     require_no_product_forbidden_text()
@@ -171,6 +188,14 @@ def main() -> None:
     assert server["command"] == "python"
     assert server["cwd"] == "."
     assert server["args"] == ["./mcp/launch.py"]
+    openai_dependency = load_openai_skill_dependency(
+        PLUGIN / "skills" / "factor-mining-demo" / "agents" / "openai.yaml"
+    )
+    assert openai_dependency["value"] in mcp["mcpServers"]
+    batch_openai_dependency = load_openai_skill_dependency(
+        PLUGIN / "skills" / "factor-mining-demo-batch" / "agents" / "openai.yaml"
+    )
+    assert batch_openai_dependency["value"] in mcp["mcpServers"]
 
     sys.path.insert(0, str(MCP_ROOT))
     import server as mcp_server

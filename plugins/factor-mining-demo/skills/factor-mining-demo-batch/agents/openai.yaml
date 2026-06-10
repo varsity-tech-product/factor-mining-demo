@@ -1,0 +1,11 @@
+interface:
+  display_name: "Factor Mining Demo Batch"
+  short_description: "Run isolated serial batches of Factor Mining Demo attempts"
+  default_prompt: "Use Factor Mining Demo to mine multiple distinct factors for one task."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "fm-demo"
+      description: "Factor Mining Demo bundled MCP server"
+      transport: "stdio"
