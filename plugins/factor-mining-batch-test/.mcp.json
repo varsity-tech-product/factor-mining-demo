@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "factor-mining-batch-test": {
+      "command": "python",
+      "cwd": ".",
+      "args": [
+        "./mcp/launch.py"
+      ]
+    }
+  }
+}

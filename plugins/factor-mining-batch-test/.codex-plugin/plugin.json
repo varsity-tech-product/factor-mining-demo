@@ -1,0 +1,42 @@
+{
+  "name": "factor-mining-batch-test",
+  "version": "0.2.3",
+  "description": "Local-MCP batch test plugin for direct vt_ Agent API Key Factor Mining workflows.",
+  "author": {
+    "name": "Varsity Tech Product",
+    "url": "https://github.com/varsity-tech-product"
+  },
+  "homepage": "https://github.com/varsity-tech-product/factor-mining-agent-plugins",
+  "repository": "https://github.com/varsity-tech-product/factor-mining-agent-plugins",
+  "license": "Apache-2.0",
+  "keywords": [
+    "factor-mining",
+    "agent-key",
+    "backtesting",
+    "codex",
+    "batch-test",
+    "quant"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Factor Mining Batch Test",
+    "shortDescription": "Run single-factor and serial batch Factor Mining through bundled MCP tools.",
+    "longDescription": "Factor Mining Batch Test lets Codex write local plugin.py factors, validate metadata, upload to Factor Mining, run user-scoped backtests, retrieve factor cards, summarize results, and run isolated serial batches through bundled MCP tools. The plugin stores a direct vt_ Agent API Key locally after secure local browser entry.",
+    "developerName": "Varsity Tech Product",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/varsity-tech-product/factor-mining-agent-plugins",
+    "defaultPrompt": [
+      "Show me the Factor Mining Batch Test public task list.",
+      "Use Factor Mining Batch Test with my custom factor idea.",
+      "Use Factor Mining Batch Test to mine 5 distinct factors from the public task list.",
+      "Switch Factor Mining Batch Test to a different vt_ key.",
+      "Resume my Factor Mining Batch Test run and summarize results."
+    ],
+    "brandColor": "#0F766E"
+  }
+}

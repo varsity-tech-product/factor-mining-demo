@@ -1,14 +1,14 @@
 {
-  "name": "factor-mining-marketplace",
+  "name": "factor-mining-batch-test-marketplace",
   "interface": {
-    "displayName": "Quandora Factor Mining"
+    "displayName": "Factor Mining Batch Test"
   },
   "plugins": [
     {
-      "name": "factor-mining",
+      "name": "factor-mining-batch-test",
       "source": {
         "source": "local",
-        "path": "./plugins/factor-mining"
+        "path": "./plugins/factor-mining-batch-test"
       },
       "policy": {
         "installation": "AVAILABLE",

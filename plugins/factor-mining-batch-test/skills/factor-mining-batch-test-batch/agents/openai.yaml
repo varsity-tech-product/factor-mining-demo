@@ -1,0 +1,11 @@
+interface:
+  display_name: "Factor Mining Batch Test Batch"
+  short_description: "Run isolated serial batches of Factor Mining Batch Test attempts"
+  default_prompt: "Use Factor Mining Batch Test to mine multiple distinct factors for one task."
+
+dependencies:
+  tools:
+    - type: mcp
+      value: factor-mining-batch-test
+      description: "Factor Mining Batch Test bundled MCP server"
+      transport: stdio

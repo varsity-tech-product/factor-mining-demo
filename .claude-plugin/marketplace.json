@@ -1,0 +1,25 @@
+{
+  "name": "factor-mining-batch-test-marketplace",
+  "owner": {
+    "name": "Varsity Tech Product",
+    "url": "https://github.com/varsity-tech-product"
+  },
+  "description": "Factor Mining Batch Test plugins for local-agent workflows.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "factor-mining-batch-test",
+      "description": "Run single-factor and serial batch Factor Mining workflows through bundled MCP tools.",
+      "version": "0.2.3",
+      "source": "./plugins/factor-mining-batch-test",
+      "category": "Productivity",
+      "tags": [
+        "factor-mining",
+        "quant",
+        "backtesting",
+        "agent-key"
+      ],
+      "strict": true
+    }
+  ]
+}

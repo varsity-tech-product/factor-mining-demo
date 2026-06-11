@@ -1,98 +1,151 @@
-# Quandora Factor Mining
+# Factor Mining Batch Test
 
-Quandora Factor Mining is a local-agent plugin distribution for turning public
-factor tasks or custom factor ideas into local `plugin.py` factors, then
-submitting them to Quandora for validation, backtesting, artifact retrieval,
-and result summaries.
+Factor Mining Batch Test is a downloadable local-MCP batch test build for Codex,
+Codex Desktop, Claude Code, and OpenClaw. It supports the currently working
+single-factor workflow and adds serial batch factor mining in the same bundled
+plugin package.
 
-Codex is available now. Claude Code and OpenClaw adapter slots are reserved for
-future releases and are not installable from this repository yet.
+This is not the final remote-MCP production package. Remote MCP production
+packaging will come later.
+
+The bundled MCP server lives at `plugins/factor-mining-batch-test` and exposes
+these tools:
+
+- `factor_mining_batch_test_status`
+- `factor_mining_batch_test_setup_browser`
+- `factor_mining_batch_test_list_public_tasks`
+- `factor_mining_batch_test_create_task_session`
+- `factor_mining_batch_test_create_custom_session`
+- `factor_mining_batch_test_parse_plugin_metadata`
+- `factor_mining_batch_test_request_dedup_context`
+- `factor_mining_batch_test_upload_backtest_wait`
+- `factor_mining_batch_test_resume_run`
+- `factor_mining_batch_test_get_workflow`
+- `factor_mining_batch_test_get_job`
+- `factor_mining_batch_test_get_artifact`
+- `factor_mining_batch_test_batch_start`
+- `factor_mining_batch_test_batch_next`
+- `factor_mining_batch_test_batch_upload_backtest_wait`
+- `factor_mining_batch_test_batch_status`
+- `factor_mining_batch_test_batch_results`
+- `factor_mining_batch_test_batch_cancel`
+- `factor_mining_batch_test_clear_config`
+
+Key entry happens through the local browser setup page returned by
+`factor_mining_batch_test_setup_browser`. Do not paste the key into chat.
 
 ## Codex CLI
 
-Install the marketplace and plugin:
+Install from the batch-test branch:
 
 ```bash
-codex plugin marketplace add varsity-tech-product/factor-mining-agent-plugins --ref main
-codex plugin add factor-mining@factor-mining-marketplace
+codex plugin marketplace add varsity-tech-product/factor-mining-agent-plugins --ref feat/batch-test-local-mcp
+codex plugin add factor-mining-batch-test@factor-mining-batch-test-marketplace
 ```
 
-Or run:
+Update an existing installation:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-agent-plugins/main/install-codex.sh | bash
+codex plugin marketplace upgrade factor-mining-batch-test-marketplace
+codex plugin remove factor-mining-batch-test@factor-mining-batch-test-marketplace
+codex plugin add factor-mining-batch-test@factor-mining-batch-test-marketplace
 ```
 
 ## Codex Desktop
 
-Use these fields in Codex Desktop:
+Add the marketplace in Codex Desktop with these fields:
 
 ```text
 Source: varsity-tech-product/factor-mining-agent-plugins
-Git ref: main
-Plugin: factor-mining@factor-mining-marketplace
+Git ref: feat/batch-test-local-mcp
+Plugin: factor-mining-batch-test@factor-mining-batch-test-marketplace
 ```
 
-You can also run:
+After updating, fully quit and reopen Codex Desktop, then start a new chat. If
+the MCP server cannot find Python, launch Codex Desktop from an environment
+where `python3` is on `PATH` or configure the system PATH. Do not edit the repo
+manifests to add a machine-specific Python path.
+
+## Claude Code
+
+Install from the batch-test branch:
 
 ```bash
-./install-codex-desktop.sh
+claude plugin marketplace add varsity-tech-product/factor-mining-agent-plugins@feat/batch-test-local-mcp
+claude plugin install factor-mining-batch-test@factor-mining-batch-test-marketplace
+claude plugin validate plugins/factor-mining-batch-test
 ```
 
-## First Prompts
-
-```text
-Show me the Factor Mining public task list.
-Use Factor Mining with my custom factor idea.
-Resume my Factor Mining run and summarize results.
-```
-
-## Local Agent Connect
-
-The Codex plugin owns Local Agent Connect. When authorization is needed, Codex
-calls `quandora_connect`, the plugin opens:
-
-```text
-https://www.quandora.ai/local-agent/connect
-```
-
-The user signs in and authorizes in the browser. The web app redirects to the
-plugin's local loopback callback, the plugin exchanges the code with PKCE, and
-the returned delegated `vt_agent_...` credential is stored locally with
-owner-only permissions. The plugin then uses that credential for task listing,
-session creation, plugin upload, backtesting, job polling, and factor-card
-artifact retrieval.
-
-There is no manual key-paste flow.
-
-## Buddy
-
-Buddy is an optional desktop animation companion. It is not required for
-authorization, credential storage, upload, backtesting, polling, or artifact
-retrieval. Plugin installation never installs or starts Buddy.
-
-## Localhost Testing
-
-Local connect web testing is available only through an explicit override:
+Update an existing installation:
 
 ```bash
-QUANDORA_CONNECT_WEB_URL=http://127.0.0.1:3037/local-agent/connect
+claude plugin marketplace update factor-mining-batch-test-marketplace
+claude plugin update factor-mining-batch-test@factor-mining-batch-test-marketplace
+claude mcp list
 ```
 
-The production default remains `https://www.quandora.ai/local-agent/connect`.
+## OpenClaw
 
-## Repository Layout
+OpenClaw uses the same bundle package. The installer adds or updates the
+`factormining` agent, installs `factor-mining-batch-test`, configures the
+`factor-mining-batch-test` MCP server with an absolute `python3` path at install
+time, verifies tool visibility, and restarts services when needed.
+
+Recommended install or update:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-agent-plugins/feat/batch-test-local-mcp/install-openclaw.sh | bash
+```
+
+Manual install:
+
+```bash
+openclaw plugins install factor-mining-batch-test --marketplace https://github.com/varsity-tech-product/factor-mining-agent-plugins.git#feat/batch-test-local-mcp --force
+PLUGIN_ROOT="$(openclaw plugins inspect factor-mining-batch-test --json --runtime | python3 -c 'import json,sys; p=json.load(sys.stdin); print((p.get("plugin") or {}).get("rootDir") or (p.get("plugin") or {}).get("source"))')"
+openclaw mcp set factor-mining-batch-test "{\"command\":\"$(command -v python3)\",\"cwd\":\"${PLUGIN_ROOT}\",\"args\":[\"./mcp/launch.py\"]}"
+openclaw gateway restart
+openclaw node restart
+```
+
+OpenClaw may display provider-prefixed tool names such as
+`factor-mining-batch-test__factor_mining_batch_test_status`. Use the
+Factor Mining Batch Test MCP tools listed above.
+
+## Single-Factor Flow
+
+Use the `factor-mining-batch-test` skill for one factor at a time:
 
 ```text
-.agents/plugins/marketplace.json
-plugins/factor-mining/
-adapters/claude-code/
-adapters/openclaw/
+Use Factor Mining Batch Test. Verify status, then show me the public task list.
+Use Factor Mining Batch Test with my custom factor idea.
+Use Factor Mining Batch Test to resume my run and summarize results.
 ```
 
-`plugins/factor-mining/` contains the Codex package. The adapter directories
-are reserved empty slots for future releases.
+The single-factor flow keeps the setup, task/session creation, static metadata
+parse, dedup context, upload/backtest wait, resume, artifact retrieval, and
+clear-config workflows behind MCP tools.
+
+## Serial Batch Flow
+
+Use the `factor-mining-batch-test-batch` skill for multiple factor attempts:
+
+```text
+Use Factor Mining Batch Test to mine 5 distinct factors from the public task list.
+Use Factor Mining Batch Test to mine 4 custom factors from my idea.
+```
+
+Batch mode is serial and isolated. Each attempt gets its own MCP-managed local
+state and artifact area. `factor_mining_batch_test_batch_next` returns only the
+current attempt packet, and the batch skill instructs the agent not to inspect
+sibling attempt directories. Setup, auth, network, backend, and config errors
+block or retry the current attempt instead of silently advancing.
+
+## Local State
+
+Configuration is stored under `~/.factor-mining-batch-test/`. Run state is
+stored under `~/.factor-mining-batch-test/runs/`. Batch state is stored under
+`~/.factor-mining-batch-test/batches/`.
 
 ## License
 
-This repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0.

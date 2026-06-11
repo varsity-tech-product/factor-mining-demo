@@ -1,0 +1,11 @@
+interface:
+  display_name: "Factor Mining Batch Test"
+  short_description: "Write, upload, and backtest Factor Mining Batch Test plugins"
+  default_prompt: "Use Factor Mining Batch Test to list public tasks or run a custom factor idea."
+
+dependencies:
+  tools:
+    - type: mcp
+      value: factor-mining-batch-test
+      description: "Factor Mining Batch Test bundled MCP server"
+      transport: stdio
