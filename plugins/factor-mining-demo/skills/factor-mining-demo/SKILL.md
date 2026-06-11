@@ -69,7 +69,9 @@ The tool saves `default_factor_card.json` and image artifacts referenced by the
 factor card into `factor_mining_demo_artifacts/` beside `plugin.py` unless an
 explicit `output_dir` is provided. Use the returned artifact paths and original
 saved images; do not recreate backend plots from JSON when those image
-artifacts are available.
+artifacts are available. The MCP tool also tries the standard backtest image
+artifacts `default_cs_nav_curves.png`, `default_cs_profile_4panel.png`, and
+`default_group_return_plot.png` even when the factor card does not list them.
 
 After upload, inspect the returned `ok`, `status`, `terminal_status`,
 `failures`, sanitized job statuses, artifact availability, and factor-card
@@ -78,8 +80,13 @@ metrics. Fetch the default factor card through
 state says an artifact should be available. Use `factor_mining_demo_resume_run`
 after an interrupted session.
 
-Never show backend job IDs, presigned URLs, local absolute paths, raw
-credentials, bearer tokens, or `plugin.py` source in user-facing summaries.
+When `artifact.image_artifacts` is present, show those saved original images in
+the conversation when the host supports image display. Do not print local
+absolute paths as text; use concise filenames in text summaries. If no images
+are available, say whether the standard image artifacts were unavailable.
+
+Never show backend job IDs, presigned URLs, raw credentials, bearer tokens, or
+`plugin.py` source in user-facing summaries.
 
 ## plugin.py Contract
 

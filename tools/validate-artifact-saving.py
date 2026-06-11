@@ -23,15 +23,15 @@ class FakeClient:
             "factor_name": "Validation Factor",
             "metrics": {"rank_ic": 0.1},
             "artifacts": {
-                "default_cs_nav_curves.png": {"kind": "plot"},
                 "group_daily.parquet": {"kind": "data"},
-                "nested": ["rendered_group_summary.png", "notes.txt"],
+                "notes": "factor card intentionally omits image artifact names",
             },
         }
         self.card_body = json.dumps(self.card, separators=(",", ":"), sort_keys=True).encode("utf-8")
         self.images = {
             "default_cs_nav_curves.png": b"\x89PNG\r\n\x1a\nnav",
-            "rendered_group_summary.png": b"\x89PNG\r\n\x1a\nsummary",
+            "default_cs_profile_4panel.png": b"\x89PNG\r\n\x1a\nprofile",
+            "default_group_return_plot.png": b"\x89PNG\r\n\x1a\ngroups",
         }
 
     def artifact_download(self, job_id: str, name: str) -> ArtifactDownload:
@@ -67,7 +67,7 @@ def main() -> int:
         assert card == client.card, card
         assert artifact["status"] == "available", artifact
         assert artifact["path"] == str(Path(tmpdir) / "default_factor_card.json"), artifact
-        assert len(artifact.get("image_artifacts") or []) == 2, artifact
+        assert len(artifact.get("image_artifacts") or []) == 3, artifact
         assert not (Path(tmpdir) / "group_daily.parquet").exists()
         assert (Path(tmpdir) / "default_factor_card.json").read_bytes() == client.card_body
         for image_name, image_body in client.images.items():
@@ -76,7 +76,8 @@ def main() -> int:
         assert requested_names == [
             "default_factor_card.json",
             "default_cs_nav_curves.png",
-            "rendered_group_summary.png",
+            "default_cs_profile_4panel.png",
+            "default_group_return_plot.png",
         ], requested_names
     print("artifact saving validation passed")
     return 0

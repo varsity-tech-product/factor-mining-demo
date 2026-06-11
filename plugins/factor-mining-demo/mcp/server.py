@@ -38,7 +38,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "factor-mining-demo"
-SERVER_VERSION = "0.2.4"
+SERVER_VERSION = "0.2.5"
 MISSING_CREDENTIAL_MESSAGE = (
     "Factor Mining Demo setup is required. Call factor_mining_demo_setup_browser and enter the vt_ Agent API Key "
     "in the local browser page, not in chat."
@@ -52,6 +52,11 @@ TASK_PAYLOAD_REQUIRED_FIELDS = {
     "fwd_period",
 }
 IMAGE_ARTIFACT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+DEFAULT_IMAGE_ARTIFACT_NAMES = (
+    "default_cs_nav_curves.png",
+    "default_cs_profile_4panel.png",
+    "default_group_return_plot.png",
+)
 
 
 class McpServerError(RuntimeError):
@@ -858,7 +863,7 @@ def _fetch_card_image_artifacts(
         return [], []
     artifacts: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
-    for image_name in _extract_image_artifact_names(card):
+    for image_name in _candidate_image_artifact_names(card):
         try:
             download = client.artifact_download(job_id, image_name)
             saved_path = _save_downloaded_artifact(output_dir, image_name, download)
@@ -882,6 +887,16 @@ def _fetch_card_image_artifacts(
                 }
             )
     return artifacts, errors
+
+
+def _candidate_image_artifact_names(card: Mapping[str, Any]) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for image_name in [*_extract_image_artifact_names(card), *DEFAULT_IMAGE_ARTIFACT_NAMES]:
+        if image_name not in seen:
+            seen.add(image_name)
+            names.append(image_name)
+    return names
 
 
 def _extract_image_artifact_names(payload: Any) -> list[str]:

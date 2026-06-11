@@ -1,6 +1,6 @@
 {
   "name": "factor-mining-demo",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "MCP-first demo plugin for the direct vt_ Agent API Key Factor Mining workflow.",
   "author": {
     "name": "Varsity Tech Product",

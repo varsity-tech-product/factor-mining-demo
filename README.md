@@ -30,7 +30,9 @@ files.
 
 Completed backtest runs save `default_factor_card.json` and factor-card image
 artifacts by default into `factor_mining_demo_artifacts/` beside the submitted
-`plugin.py`. Explicit `output_dir` tool arguments override that location.
+`plugin.py`. The MCP server also tries the standard Factor Mining image
+artifacts even when the factor card does not list them. Explicit `output_dir`
+tool arguments override the save location.
 
 ## Codex CLI
 
