@@ -88,7 +88,7 @@ claude mcp list
 
 OpenClaw uses the same bundle package. The installer adds or updates the
 `factormining` agent, installs `factor-mining-batch-test`, configures the
-`factor-mining-batch-test` MCP server with an absolute `python3` path at install
+`fmbt` MCP server with an absolute `python3` path at install
 time, verifies tool visibility, and restarts services when needed.
 
 Recommended install or update:
@@ -102,13 +102,13 @@ Manual install:
 ```bash
 openclaw plugins install factor-mining-batch-test --marketplace https://github.com/varsity-tech-product/factor-mining-agent-plugins.git#feat/batch-test-local-mcp --force
 PLUGIN_ROOT="$(openclaw plugins inspect factor-mining-batch-test --json --runtime | python3 -c 'import json,sys; p=json.load(sys.stdin); print((p.get("plugin") or {}).get("rootDir") or (p.get("plugin") or {}).get("source"))')"
-openclaw mcp set factor-mining-batch-test "{\"command\":\"$(command -v python3)\",\"cwd\":\"${PLUGIN_ROOT}\",\"args\":[\"./mcp/launch.py\"]}"
+openclaw mcp set fmbt "{\"command\":\"$(command -v python3)\",\"cwd\":\"${PLUGIN_ROOT}\",\"args\":[\"./mcp/launch.py\"]}"
 openclaw gateway restart
 openclaw node restart
 ```
 
 OpenClaw may display provider-prefixed tool names such as
-`factor-mining-batch-test__factor_mining_batch_test_status`. Use the
+`fmbt__factor_mining_batch_test_status`. Use the
 Factor Mining Batch Test MCP tools listed above.
 
 ## Single-Factor Flow

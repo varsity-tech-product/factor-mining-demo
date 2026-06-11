@@ -35,7 +35,7 @@ the gateway/node host does not depend on shell startup files.
 - `factor_mining_batch_test_clear_config`
 
 OpenClaw may display provider-prefixed tool names such as
-`factor-mining-batch-test__factor_mining_batch_test_status`; those are the same bundled tools.
+`fmbt__factor_mining_batch_test_status`; those are the same bundled tools.
 
 ## Serial Batch Mode
 

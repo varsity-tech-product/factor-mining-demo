@@ -15,7 +15,9 @@ MCP_ROOT = PLUGIN / "mcp"
 MARKETPLACE_NAME = "factor-mining-batch-test-marketplace"
 PLUGIN_NAME = "factor-mining-batch-test"
 DISPLAY_NAME = "Factor Mining Batch Test"
-MCP_SERVER_ID = "factor-mining-batch-test"
+MCP_SERVER_ID = "fmbt"
+OLD_MCP_SERVER_ID = "factor-mining-batch-test"
+OPENCLAW_TOOL_NAME_LIMIT = 64
 MAIN_SKILL = "factor-mining-batch-test"
 BATCH_SKILL = "factor-mining-batch-test-batch"
 STATE_DIR = ".factor-mining-batch-test"
@@ -44,6 +46,13 @@ BATCH_TOOLS = {
     "factor_mining_batch_test_batch_results",
     "factor_mining_batch_test_batch_cancel",
 }
+PRODUCT_FACING_DOCS = [
+    ROOT / "README.md",
+    ROOT / "install-openclaw.sh",
+    PLUGIN / "README.md",
+    PLUGIN / "skills" / MAIN_SKILL / "SKILL.md",
+    PLUGIN / "skills" / BATCH_SKILL / "SKILL.md",
+]
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -61,6 +70,48 @@ def require(condition: bool, message: str) -> None:
 
 def require_file(path: Path) -> None:
     require(path.is_file(), f"missing file: {path.relative_to(ROOT)}")
+
+
+def require_no_old_openclaw_provider_prefix() -> None:
+    old_prefix = f"{OLD_MCP_SERVER_ID}__"
+    failures = []
+    for path in PRODUCT_FACING_DOCS:
+        text = path.read_text(encoding="utf-8")
+        if old_prefix in text:
+            failures.append(f"{path.relative_to(ROOT)} contains old OpenClaw provider prefix {old_prefix}")
+    require(not failures, "\n".join(failures))
+
+
+def require_openclaw_provider_safe_names(tool_names: set[str]) -> None:
+    failures = []
+    for tool_name in sorted(tool_names):
+        provider_safe_name = f"{MCP_SERVER_ID}__{tool_name}"
+        if len(provider_safe_name) > OPENCLAW_TOOL_NAME_LIMIT:
+            failures.append(
+                f"{provider_safe_name} is {len(provider_safe_name)} chars, "
+                f"exceeding OpenClaw's {OPENCLAW_TOOL_NAME_LIMIT}-char limit"
+            )
+        if provider_safe_name[:OPENCLAW_TOOL_NAME_LIMIT] != provider_safe_name:
+            failures.append(f"{provider_safe_name} would be truncated by OpenClaw")
+    require(not failures, "\n".join(failures))
+
+
+def require_openclaw_installer_probe_validation() -> None:
+    text = (ROOT / "install-openclaw.sh").read_text(encoding="utf-8")
+    require(f'MCP_SERVER_ID="{MCP_SERVER_ID}"' in text, "OpenClaw installer must set MCP_SERVER_ID to fmbt")
+    require('required_agent_allow = [f"{mcp_server_id}__*"]' in text, "OpenClaw allowlist must use the short MCP server id")
+    require('mcp set "${MCP_SERVER_ID}"' in text, "OpenClaw installer must configure MCP startup under fmbt")
+    probe_lines = [line.strip() for line in text.splitlines() if "mcp probe" in line]
+    require(probe_lines, "OpenClaw installer must probe the MCP server")
+    for line in probe_lines:
+        require('"${MCP_SERVER_ID}" --json' in line, "OpenClaw installer must probe fmbt with --json")
+        require("2>&1" not in line, "OpenClaw MCP probe must not combine stdout and stderr")
+    require("PROBE_JSON" in text, "OpenClaw tool visibility parser must read JSON stdout")
+    require("json.loads(payload)" in text, "OpenClaw tool visibility parser must parse JSON stdout")
+    require("parsed = payload" not in text, "OpenClaw tool visibility parser must not fall back to raw string search")
+    require("probe_json_parse_error" in text, "OpenClaw installer must fail clearly when probe JSON parsing fails")
+    require("provider[- ]?safe.*truncat|truncat.*provider[- ]?safe" in text, "OpenClaw installer must fail on provider-safe truncation warnings")
+    require('tools_in_payload "${probe_stdout}" "${MCP_SERVER_ID}"' in text, "OpenClaw installer must validate only probe stdout")
 
 
 def require_skill_mcp_dependency(skill_name: str) -> None:
@@ -98,6 +149,10 @@ def main() -> int:
     ]
     for path in required_files:
         require_file(path)
+    for path in PRODUCT_FACING_DOCS:
+        require_file(path)
+    require_no_old_openclaw_provider_prefix()
+    require_openclaw_installer_probe_validation()
 
     marketplace = load_json(ROOT / ".agents" / "plugins" / "marketplace.json")
     require(marketplace.get("name") == MARKETPLACE_NAME, "Codex marketplace name is not batch-test")
@@ -137,6 +192,7 @@ def main() -> int:
     names = set(server.list_tool_names())
     expected = SINGLE_TOOLS | BATCH_TOOLS
     require(names == expected, f"MCP tools mismatch: missing={sorted(expected - names)} extra={sorted(names - expected)}")
+    require_openclaw_provider_safe_names(expected)
     require(server.SERVER_NAME == MCP_SERVER_ID, "MCP server name is wrong")
     require(
         "factor_mining_batch_test_setup_browser" in server.MISSING_CREDENTIAL_MESSAGE,

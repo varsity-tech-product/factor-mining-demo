@@ -6,6 +6,6 @@ interface:
 dependencies:
   tools:
     - type: mcp
-      value: factor-mining-batch-test
+      value: fmbt
       description: "Factor Mining Batch Test bundled MCP server"
       transport: stdio

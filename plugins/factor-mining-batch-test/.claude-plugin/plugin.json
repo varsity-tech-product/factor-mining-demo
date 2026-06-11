@@ -7,7 +7,7 @@
     "url": "https://github.com/varsity-tech-product"
   },
   "mcpServers": {
-    "factor-mining-batch-test": {
+    "fmbt": {
       "command": "python",
       "cwd": "${CLAUDE_PLUGIN_ROOT}",
       "args": [

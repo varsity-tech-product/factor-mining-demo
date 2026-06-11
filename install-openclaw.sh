@@ -3,6 +3,7 @@ set -euo pipefail
 
 PLUGIN_ID="factor-mining-batch-test"
 BATCH_SKILL_ID="factor-mining-batch-test-batch"
+MCP_SERVER_ID="fmbt"
 AGENT_ID="factormining"
 AGENT_NAME="factormining"
 WORKSPACE_DIR="${FACTOR_MINING_BATCH_TEST_WORKSPACE:-${HOME}/.openclaw/workspaces/factor-mining-agent}"
@@ -181,6 +182,7 @@ patch_agent_config() {
   AGENT_DIR="${AGENT_DIR}" \
   PLUGIN_ID="${PLUGIN_ID}" \
   BATCH_SKILL_ID="${BATCH_SKILL_ID}" \
+  MCP_SERVER_ID="${MCP_SERVER_ID}" \
   SET_DEFAULT="${SET_DEFAULT}" \
   python3 <<'PY'
 import json
@@ -196,6 +198,7 @@ workspace_dir = os.environ["WORKSPACE_DIR"]
 agent_dir = os.environ["AGENT_DIR"]
 plugin_id = os.environ["PLUGIN_ID"]
 batch_skill_id = os.environ["BATCH_SKILL_ID"]
+mcp_server_id = os.environ["MCP_SERVER_ID"]
 set_default = os.environ["SET_DEFAULT"] != "0"
 
 required_local_capabilities = {
@@ -208,7 +211,7 @@ required_local_capabilities = {
     "web_fetch",
 }
 required_blockers = required_local_capabilities | {"group:fs", "group:runtime", "group:web"}
-required_agent_allow = ["factor-mining-batch-test__*"]
+required_agent_allow = [f"{mcp_server_id}__*"]
 
 if config_path.exists():
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -414,14 +417,17 @@ verify_model_auth() {
 
 tools_in_payload() {
   local payload="$1"
+  local server_id="$2"
   REQUIRED_TOOLS_JSON="$(printf '%s\n' "${REQUIRED_MCP_TOOLS[@]}" | python3 -c 'import json,sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')" \
-  PAYLOAD="${payload}" python3 <<'PY'
+  MCP_SERVER_ID="${server_id}" \
+  PROBE_JSON="${payload}" python3 <<'PY'
 import json
 import os
 import sys
 
 required = json.loads(os.environ["REQUIRED_TOOLS_JSON"])
-payload = os.environ.get("PAYLOAD") or ""
+payload = os.environ.get("PROBE_JSON") or ""
+server_id = os.environ["MCP_SERVER_ID"]
 
 def names(value):
     found = set()
@@ -439,21 +445,16 @@ def names(value):
 
 try:
     parsed = json.loads(payload)
-except Exception:
-    parsed = payload
+except Exception as exc:
+    print(f"probe_json_parse_error={exc}", file=sys.stderr)
+    raise SystemExit(1)
 
-if isinstance(parsed, str):
-    visible = set()
-    for tool in required:
-        if tool in parsed:
-            visible.add(tool)
-else:
-    raw_names = names(parsed)
-    visible = {
-        tool
-        for tool in required
-        if tool in raw_names or any(name.endswith("__" + tool) for name in raw_names)
-    }
+raw_names = names(parsed)
+visible = {
+    tool
+    for tool in required
+    if tool in raw_names or f"{server_id}__{tool}" in raw_names
+}
 
 missing = [tool for tool in required if tool not in visible]
 if missing:
@@ -464,7 +465,7 @@ PY
 }
 
 verify_mcp_tools() {
-  local output inspect_json plugin_root server_json probe_json
+  local output inspect_json plugin_root server_json probe_stdout probe_stderr probe_stderr_file
 
   log "Verifying installed OpenClaw plugin bundle"
   output="$("${OPENCLAW_BIN}" plugins inspect "${PLUGIN_ID}" 2>&1)" || {
@@ -507,13 +508,24 @@ print(json.dumps({
 }))
 PY
   )"
-  log "Configuring OpenClaw MCP startup for factor-mining-batch-test"
-  "${OPENCLAW_BIN}" mcp set factor-mining-batch-test "${server_json}" >/dev/null
-  probe_json="$("${OPENCLAW_BIN}" mcp probe factor-mining-batch-test --json 2>&1)" || {
-    printf '%s\n' "${probe_json}" >&2
-    fail "OpenClaw MCP probe failed for factor-mining-batch-test."
-  }
-  tools_in_payload "${probe_json}" || fail "OpenClaw MCP probe did not expose all Factor Mining Batch Test tools."
+  log "Configuring OpenClaw MCP startup for ${MCP_SERVER_ID}"
+  "${OPENCLAW_BIN}" mcp set "${MCP_SERVER_ID}" "${server_json}" >/dev/null
+  probe_stderr_file="$(mktemp)"
+  if probe_stdout="$("${OPENCLAW_BIN}" mcp probe "${MCP_SERVER_ID}" --json 2>"${probe_stderr_file}")"; then
+    probe_stderr="$(cat "${probe_stderr_file}")"
+    rm -f "${probe_stderr_file}"
+  else
+    probe_stderr="$(cat "${probe_stderr_file}")"
+    rm -f "${probe_stderr_file}"
+    [[ -z "${probe_stdout:-}" ]] || printf '%s\n' "${probe_stdout}" >&2
+    [[ -z "${probe_stderr}" ]] || printf '%s\n' "${probe_stderr}" >&2
+    fail "OpenClaw MCP probe failed for ${MCP_SERVER_ID}."
+  fi
+  if printf '%s\n' "${probe_stderr}" | grep -Eiq 'provider[- ]?safe.*truncat|truncat.*provider[- ]?safe'; then
+    printf '%s\n' "${probe_stderr}" >&2
+    fail "OpenClaw MCP probe reported provider-safe tool-name truncation for ${MCP_SERVER_ID}."
+  fi
+  tools_in_payload "${probe_stdout}" "${MCP_SERVER_ID}" || fail "OpenClaw MCP probe JSON did not expose all Factor Mining Batch Test tools."
 }
 
 require_command "openclaw" "Install the OpenClaw CLI first, then rerun this installer. For npm-based installs, run: npm install -g openclaw"

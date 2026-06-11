@@ -15,7 +15,7 @@ plugin tools are not loaded. Do not use raw HTTP calls or local script
 execution as a fallback.
 
 Some hosts display bundled MCP tool names with a provider prefix, such as
-`factor-mining-batch-test__factor_mining_batch_test_status`. Treat those as the
+`fmbt__factor_mining_batch_test_status`. Treat those as the
 same Factor Mining Batch Test MCP tools.
 
 ## MCP Workflow

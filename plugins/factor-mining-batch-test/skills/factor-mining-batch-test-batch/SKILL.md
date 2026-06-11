@@ -10,7 +10,7 @@ job, such as "mine 10 factors." An attempt is one factor inside that batch.
 Use only the bundled Factor Mining Batch Test MCP tools for product actions.
 
 Some hosts display bundled MCP tool names with a provider prefix, such as
-`factor-mining-batch-test__factor_mining_batch_test_batch_start`. Treat those as the same tools.
+`fmbt__factor_mining_batch_test_batch_start`. Treat those as the same tools.
 
 ## Required Flow
 

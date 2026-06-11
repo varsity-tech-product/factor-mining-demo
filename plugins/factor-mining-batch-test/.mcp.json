@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "factor-mining-batch-test": {
+    "fmbt": {
       "command": "python",
       "cwd": ".",
       "args": [

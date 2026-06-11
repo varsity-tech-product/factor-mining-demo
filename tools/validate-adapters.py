@@ -10,6 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "factor-mining-batch-test"
 MCP_ROOT = PLUGIN / "mcp"
+MCP_SERVER_ID = "fmbt"
+OLD_MCP_SERVER_ID = "factor-mining-batch-test"
+OPENCLAW_TOOL_NAME_LIMIT = 64
 REQUIRED_TOOLS = {
     "factor_mining_batch_test_status",
     "factor_mining_batch_test_setup_browser",
@@ -59,6 +62,7 @@ FORBIDDEN_ANYWHERE_PATTERNS = {
     _s("factor-mining-batch-test-", "status"): _literal_ci("factor-mining-batch-test-", "status"),
     _s("factor-mining-batch-test-", "api"): _literal_ci("factor-mining-batch-test-", "api"),
     _s("factor-mining-batch-test-upload-", "backtest"): _literal_ci("factor-mining-batch-test-upload-", "backtest"),
+    _s(OLD_MCP_SERVER_ID, "__"): _literal_cs(OLD_MCP_SERVER_ID, "__"),
     _s("helper ", "scripts"): _literal_ci("helper ", "scripts"),
     _s("Local Agent ", "Connect"): _literal_ci("Local Agent ", "Connect"),
     _s("Bud", "dy"): _literal_ci("Bud", "dy"),
@@ -110,13 +114,28 @@ def load_openai_skill_dependency(path: Path) -> dict[str, str]:
     text = path.read_text(encoding="utf-8")
     required_lines = {
         "type": "    - type: mcp",
-        "value": "      value: factor-mining-batch-test",
+        "value": f"      value: {MCP_SERVER_ID}",
         "transport": "      transport: stdio",
     }
     missing = [key for key, line in required_lines.items() if line not in text]
     if missing:
         raise AssertionError(f"{path.relative_to(ROOT)} missing OpenAI MCP dependency fields: {missing}")
-    return {"type": "mcp", "value": "factor-mining-batch-test", "transport": "stdio"}
+    return {"type": "mcp", "value": MCP_SERVER_ID, "transport": "stdio"}
+
+
+def require_openclaw_provider_safe_names(tool_names: set[str]) -> None:
+    failures: list[str] = []
+    for tool_name in sorted(tool_names):
+        provider_safe_name = f"{MCP_SERVER_ID}__{tool_name}"
+        if len(provider_safe_name) > OPENCLAW_TOOL_NAME_LIMIT:
+            failures.append(
+                f"{provider_safe_name} is {len(provider_safe_name)} chars, "
+                f"exceeding OpenClaw's {OPENCLAW_TOOL_NAME_LIMIT}-char limit"
+            )
+        if provider_safe_name[:OPENCLAW_TOOL_NAME_LIMIT] != provider_safe_name:
+            failures.append(f"{provider_safe_name} would be truncated by OpenClaw")
+    if failures:
+        raise AssertionError("\n".join(failures))
 
 
 def require(path: Path) -> None:
@@ -184,7 +203,8 @@ def main() -> None:
     assert codex_plugin["mcpServers"] == "./.mcp.json"
 
     mcp = load_json(PLUGIN / ".mcp.json")
-    server = mcp["mcpServers"]["factor-mining-batch-test"]
+    assert set(mcp["mcpServers"]) == {MCP_SERVER_ID}
+    server = mcp["mcpServers"][MCP_SERVER_ID]
     assert server["command"] == "python"
     assert server["cwd"] == "."
     assert server["args"] == ["./mcp/launch.py"]
@@ -206,6 +226,7 @@ def main() -> None:
     missing_batch = BATCH_TOOLS.difference(mcp_server.list_tool_names())
     if missing_batch:
         raise AssertionError(f"missing batch MCP tools: {sorted(missing_batch)}")
+    require_openclaw_provider_safe_names(REQUIRED_TOOLS | BATCH_TOOLS)
 
     print("packaging validation passed")
 
