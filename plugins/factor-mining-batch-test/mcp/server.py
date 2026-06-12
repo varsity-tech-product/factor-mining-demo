@@ -50,7 +50,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "fmbt"
-SERVER_VERSION = "0.2.3"
+SERVER_VERSION = "0.2.4"
 MISSING_CREDENTIAL_MESSAGE = (
     "Factor Mining Batch Test setup is required. Call factor_mining_batch_test_setup_browser and enter the vt_ Agent API Key "
     "in the local browser page, not in chat."
