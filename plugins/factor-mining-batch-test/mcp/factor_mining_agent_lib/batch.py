@@ -479,14 +479,18 @@ def _attempt_packet(state: Mapping[str, Any], attempt: Mapping[str, Any]) -> dic
         "attempt_id": attempt["attempt_id"],
         "index": attempt["index"],
         "count": state["count"],
-        "client_run_id": attempt["client_run_id"],
         "plugin_path": attempt["plugin_path"],
         "output_dir": attempt["output_dir"],
         "mode": state["mode"],
         "fwd_period": state.get("fwd_period"),
         "position_mode": state.get("position_mode"),
         "diversity_hints": _diversity_hints(state),
-        "next_action": "Write only this attempt's plugin.py, then submit it with factor_mining_batch_test_batch_upload_backtest_wait.",
+        "next_action": (
+            "Write only this attempt's plugin.py, then call "
+            "factor_mining_batch_test_batch_upload_backtest_wait with batch_id, attempt_id, and plugin_path. "
+            "Do not pass batch_id, attempt_id, or any local run id as session_id; omit session_id unless a "
+            "backend session_id was returned by a create-session MCP tool."
+        ),
     }
     if state.get("status") in BLOCKED_BATCH_STATUSES:
         packet["status"] = state.get("status")

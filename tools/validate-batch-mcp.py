@@ -72,11 +72,31 @@ VALIDATION_KEY = "vt_" "validation_secret_123456789"
 
 
 class FakeApiClient:
+    created_sessions: list[dict[str, Any]] = []
+
     def __init__(self, *args: Any, **kwargs: Any):
         pass
 
     def agent_status(self) -> dict[str, str]:
         return {"status": "ok", "agent_key": "valid"}
+
+    def create_session(
+        self,
+        *,
+        idea: str | None = None,
+        task_id: str | None = None,
+        task_payload: dict[str, Any] | None = None,
+        client_run_id: str | None = None,
+    ) -> dict[str, str]:
+        session = {
+            "idea": idea,
+            "task_id": task_id,
+            "task_payload": dict(task_payload or {}),
+            "client_run_id": client_run_id,
+            "session_id": f"session-auto-{len(self.created_sessions) + 1}",
+        }
+        self.created_sessions.append(session)
+        return {"session_id": session["session_id"]}
 
 
 class NetworkFailingApiClient(FakeApiClient):
@@ -187,6 +207,9 @@ def test_tools_and_existing_schema() -> None:
 
     batch_schema = _tool_schema("factor_mining_batch_test_batch_start")
     assert batch_schema["properties"]["position_mode"]["enum"] == SUBMISSION_POSITION_MODES
+    batch_upload_schema = _tool_schema("factor_mining_batch_test_batch_upload_backtest_wait")
+    assert batch_upload_schema["required"] == ["batch_id", "attempt_id", "plugin_path"]
+    assert "session_id" in batch_upload_schema["properties"]
 
 
 def test_status_without_config_returns_setup_required() -> None:
@@ -252,6 +275,44 @@ def test_batch_start_normalizes_backend_cs_only_output_to_submission_default() -
         mcp_server.ApiClient = original_client
 
 
+def test_custom_task_payload_rejects_unknown_allowed_data_before_backend() -> None:
+    original_client = mcp_server.ApiClient
+    mcp_server.ApiClient = FakeApiClient
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            _save_validation_config(home)
+            invalid_payload = dict(TASK_PAYLOAD)
+            invalid_payload["allowed_data"] = ["close", "not_a_known_column"]
+            for tool_name, args in (
+                (
+                    "factor_mining_batch_test_create_custom_session",
+                    {"idea": "bad custom session", "task_payload": invalid_payload, "home": str(home)},
+                ),
+                (
+                    "factor_mining_batch_test_batch_start",
+                    {
+                        "count": 1,
+                        "mode": "custom_idea",
+                        "idea": "bad batch",
+                        "task_payload": invalid_payload,
+                        "home": str(home),
+                    },
+                ),
+            ):
+                try:
+                    mcp_server.call_tool(tool_name, args)
+                except Exception as exc:
+                    message = str(exc)
+                    assert "allowed_data" in message
+                    assert "not_a_known_column" in message
+                    assert "close" in message
+                else:
+                    raise AssertionError(f"{tool_name} accepted unknown allowed_data")
+    finally:
+        mcp_server.ApiClient = original_client
+
+
 def test_batch_isolation_and_sanitization() -> None:
     original_client = mcp_server.ApiClient
     mcp_server.ApiClient = FakeApiClient
@@ -288,6 +349,7 @@ def test_batch_isolation_and_sanitization() -> None:
             assert first["done"] is False
             assert first["index"] == 1
             assert first["count"] == 2
+            assert "client_run_id" not in first
             assert first["plugin_path"] == attempts[0]["plugin_path"]
             assert first["output_dir"] == attempts[0]["output_dir"]
             assert "attempts" not in first
@@ -349,6 +411,101 @@ def test_batch_isolation_and_sanitization() -> None:
             assert str(home) not in rendered
     finally:
         mcp_server.ApiClient = original_client
+
+
+def test_batch_upload_auto_creates_backend_session_when_session_id_omitted_or_local() -> None:
+    original_client = mcp_server.ApiClient
+    original_upload = mcp_server._upload_backtest_wait
+    mcp_server.ApiClient = FakeApiClient
+    FakeApiClient.created_sessions = []
+    captured_uploads: list[dict[str, Any]] = []
+
+    def fake_upload(args: dict[str, Any], *, opener: Any, env: dict[str, str] | None) -> dict[str, Any]:
+        captured_uploads.append(dict(args))
+        return {
+            "ok": True,
+            "status": "succeeded",
+            "terminal_status": "succeeded",
+            "summary": {
+                "factor_name": "Auto Session Momentum",
+                "metrics": {"rank_ic": 0.03},
+            },
+        }
+
+    mcp_server._upload_backtest_wait = fake_upload
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            _save_validation_config(home)
+            start = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_start",
+                {
+                    "count": 1,
+                    "mode": "custom_idea",
+                    "idea": "Validate auto session creation.",
+                    "task_payload": TASK_PAYLOAD,
+                    "home": str(home),
+                },
+            )
+            batch_id = start["batch_id"]
+            first = mcp_server.call_tool("factor_mining_batch_test_batch_next", {"batch_id": batch_id, "home": str(home)})
+            state_before = _read_batch(home, batch_id)
+            local_client_run_id = state_before["attempts"][0]["client_run_id"]
+            _write_valid_plugin(first["plugin_path"])
+
+            result = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_upload_backtest_wait",
+                {
+                    "batch_id": batch_id,
+                    "attempt_id": first["attempt_id"],
+                    "session_id": local_client_run_id,
+                    "plugin_path": first["plugin_path"],
+                    "home": str(home),
+                },
+            )
+            assert result["ok"] is True
+            assert FakeApiClient.created_sessions
+            assert FakeApiClient.created_sessions[0]["client_run_id"] == local_client_run_id
+            assert FakeApiClient.created_sessions[0]["idea"] == "Validate auto session creation."
+            assert captured_uploads[0]["session_id"] == "session-auto-1"
+            assert captured_uploads[0]["session_id"] != local_client_run_id
+            state_after = _read_batch(home, batch_id)
+            assert state_after["attempts"][0]["session_id"] == "session-auto-1"
+
+            second_start = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_start",
+                {
+                    "count": 1,
+                    "mode": "custom_idea",
+                    "idea": "Validate omitted session creation.",
+                    "task_payload": TASK_PAYLOAD,
+                    "home": str(home),
+                },
+            )
+            second_batch_id = second_start["batch_id"]
+            second = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_next",
+                {"batch_id": second_batch_id, "home": str(home)},
+            )
+            _write_valid_plugin(second["plugin_path"])
+
+            omitted_result = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_upload_backtest_wait",
+                {
+                    "batch_id": second_batch_id,
+                    "attempt_id": second["attempt_id"],
+                    "plugin_path": second["plugin_path"],
+                    "home": str(home),
+                },
+            )
+            assert omitted_result["ok"] is True
+            assert FakeApiClient.created_sessions[1]["idea"] == "Validate omitted session creation."
+            assert captured_uploads[1]["session_id"] == "session-auto-2"
+            second_state = _read_batch(home, second_batch_id)
+            assert second_state["attempts"][0]["session_id"] == "session-auto-2"
+    finally:
+        mcp_server.ApiClient = original_client
+        mcp_server._upload_backtest_wait = original_upload
 
 
 def test_batch_upload_network_failure_blocks_without_failed_attempt_or_advancing() -> None:
@@ -432,7 +589,7 @@ def test_batch_attempts_preserve_single_run_result_summary() -> None:
                 "ok": True,
                 "status": "succeeded",
                 "terminal_status": "succeeded",
-                "client_run_id": first["client_run_id"],
+                "client_run_id": "private-client-run",
                 "session_id": "session-secret",
                 "plugin_id": "plugin-secret",
                 "job_ids": ["job-secret"],
@@ -743,7 +900,9 @@ def main() -> int:
     test_public_task_batch_start_requires_task_id_helpfully()
     test_batch_skill_public_task_flow_lists_tasks_before_start()
     test_batch_start_normalizes_backend_cs_only_output_to_submission_default()
+    test_custom_task_payload_rejects_unknown_allowed_data_before_backend()
     test_batch_isolation_and_sanitization()
+    test_batch_upload_auto_creates_backend_session_when_session_id_omitted_or_local()
     test_batch_upload_network_failure_blocks_without_failed_attempt_or_advancing()
     test_batch_attempts_preserve_single_run_result_summary()
     test_run_wait_fetches_factor_card_and_default_backtest_images()

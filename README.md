@@ -125,6 +125,10 @@ The single-factor flow keeps the setup, task/session creation, static metadata
 parse, dedup context, upload/backtest wait, resume, artifact retrieval, and
 clear-config workflows behind MCP tools.
 
+For custom ideas, use `allowed_data: ["close"]` by default and add only real
+columns the generated `plugin.py` actually uses. The MCP tools reject unknown
+columns before creating a backend session.
+
 ## Serial Batch Flow
 
 Use the `factor-mining-batch-test-batch` skill for multiple factor attempts:
@@ -139,6 +143,10 @@ state and artifact area. `factor_mining_batch_test_batch_next` returns only the
 current attempt packet, and the batch skill instructs the agent not to inspect
 sibling attempt directories. Setup, auth, network, backend, and config errors
 block or retry the current attempt instead of silently advancing.
+`factor_mining_batch_test_batch_upload_backtest_wait` creates the correct
+backend session from batch state when `session_id` is omitted. Agents should omit
+`session_id` in normal batch submissions and must never use local batch,
+attempt, or client-run identifiers as backend session identifiers.
 
 Each completed batch attempt returns the same kind of sanitized result summary as
 a single-factor run, including status, factor-card metrics, artifact status, and

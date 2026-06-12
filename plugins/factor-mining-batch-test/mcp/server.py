@@ -59,7 +59,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "fmbt"
-SERVER_VERSION = "0.2.8"
+SERVER_VERSION = "0.2.9"
 MCP_IMAGE_SOURCES_KEY = "_mcp_images"
 MAX_MCP_IMAGES = 12
 MAX_MCP_IMAGE_BYTES = 5 * 1024 * 1024
@@ -75,6 +75,45 @@ TASK_PAYLOAD_REQUIRED_FIELDS = {
     "allowed_data",
     "fwd_period",
 }
+ALLOWED_DATA_COLUMNS = frozenset(
+    {
+        "close",
+        "open",
+        "high",
+        "low",
+        "volume",
+        "quote_volume",
+        "taker_buy_volume",
+        "taker_sell_volume",
+        "taker_buy_quote_volume",
+        "taker_sell_quote_volume",
+        "taker_buy_trades",
+        "taker_sell_trades",
+        "open_interest_open",
+        "open_interest_high",
+        "open_interest_low",
+        "open_interest_close",
+        "funding_rate_open",
+        "funding_rate_high",
+        "funding_rate_low",
+        "funding_rate_close",
+        "global_account_long_percent",
+        "global_account_short_percent",
+        "global_account_long_short_ratio",
+        "top_position_long_percent",
+        "top_position_short_percent",
+        "top_position_long_short_ratio",
+        "top_account_long_percent",
+        "top_account_short_percent",
+        "top_account_long_short_ratio",
+        "liquidation_long_usd",
+        "liquidation_short_usd",
+        "binance_premium_index_open",
+        "binance_premium_index_high",
+        "binance_premium_index_low",
+        "binance_premium_index_close",
+    }
+)
 DEFAULT_FACTOR_CARD_ARTIFACT = "default_factor_card.json"
 DEFAULT_BACKTEST_ARTIFACTS = (
     DEFAULT_FACTOR_CARD_ARTIFACT,
@@ -407,7 +446,7 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "description": "Submit the current batch attempt plugin.py through the guarded serial batch workflow.",
         "inputSchema": {
             "type": "object",
-            "required": ["batch_id", "attempt_id", "session_id", "plugin_path"],
+            "required": ["batch_id", "attempt_id", "plugin_path"],
             "properties": {
                 "batch_id": {"type": "string"},
                 "attempt_id": {"type": "string"},
@@ -791,13 +830,18 @@ def _get_artifact(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str
 def _batch_start(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] | None) -> Any:
     if "count" not in args:
         raise ToolInputError("count is required")
+    mode = _required_string(args, "mode")
     task_payload = args.get("task_payload")
     if task_payload is not None and not isinstance(task_payload, Mapping):
         raise ToolInputError("task_payload must be a JSON object")
+    if task_payload is not None:
+        _validate_task_payload(task_payload)
+    if mode == "custom_idea" and task_payload is None:
+        raise ToolInputError("task_payload is required for custom_idea batch mode")
     _client_from_config(args, opener=opener, env=env)
     return create_batch(
         count=args["count"],
-        mode=_required_string(args, "mode"),
+        mode=mode,
         task_id=_optional_string(args, "task_id"),
         idea=_optional_string(args, "idea"),
         task_payload=task_payload,
@@ -812,16 +856,76 @@ def _batch_next(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> An
     return next_attempt_packet(_required_string(args, "batch_id"), home=_configured_home(args, env))
 
 
+def _batch_attempt_session_id(
+    args: Mapping[str, Any],
+    *,
+    batch_id: str,
+    attempt_id: str,
+    opener: Any,
+    env: Mapping[str, str] | None,
+) -> str:
+    requested = _optional_string(args, "session_id")
+    home = _configured_home(args, env)
+    state = load_batch_state(batch_id, home=home)
+    attempt = _batch_attempt(state, attempt_id)
+    local_ids = {batch_id, attempt_id, str(attempt.get("client_run_id") or "")}
+    if requested and requested not in local_ids:
+        return requested
+
+    _config, client = _client_from_config(args, opener=opener, env=env)
+    client_run_id = str(attempt.get("client_run_id") or "")
+    if not client_run_id:
+        raise ToolInputError("batch attempt is missing its local client_run_id")
+
+    mode = str(state.get("mode") or "")
+    if mode == "public_task":
+        task_id = str(state.get("task_id") or "").strip()
+        if not task_id:
+            raise ToolInputError("task_id is required to create a backend session for public_task batch mode")
+        response = client.create_session(task_id=task_id, client_run_id=client_run_id)
+    elif mode == "custom_idea":
+        idea = str(state.get("idea") or "").strip()
+        if not idea:
+            raise ToolInputError("idea is required to create a backend session for custom_idea batch mode")
+        task_payload = state.get("task_payload")
+        if not isinstance(task_payload, Mapping):
+            raise ToolInputError("task_payload is required to create a backend session for custom_idea batch mode")
+        _validate_task_payload(task_payload)
+        response = client.create_session(idea=idea, task_payload=task_payload, client_run_id=client_run_id)
+    else:
+        raise ToolInputError(f"unsupported batch mode: {mode}")
+
+    session_id = _session_id(response)
+    if not session_id:
+        raise McpServerError("Create session response did not include session_id")
+    return session_id
+
+
+def _batch_attempt(state: Mapping[str, Any], attempt_id: str) -> Mapping[str, Any]:
+    attempts = state.get("attempts")
+    if isinstance(attempts, list):
+        for attempt in attempts:
+            if isinstance(attempt, Mapping) and str(attempt.get("attempt_id")) == attempt_id:
+                return attempt
+    raise BatchError(f"unknown attempt_id: {attempt_id}")
+
+
 def _batch_upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] | None) -> Any:
     home = _configured_home(args, env)
     batch_id = _required_string(args, "batch_id")
     attempt_id = _required_string(args, "attempt_id")
-    session_id = _required_string(args, "session_id")
     artifact_name = _optional_string(args, "artifact_name") or DEFAULT_FACTOR_CARD_ARTIFACT
     _validate_artifact_name(artifact_name)
 
     metadata_dict: dict[str, Any] = {}
     try:
+        session_id = _batch_attempt_session_id(
+            args,
+            batch_id=batch_id,
+            attempt_id=attempt_id,
+            opener=opener,
+            env=env,
+        )
         prepared = prepare_attempt_upload(
             batch_id=batch_id,
             attempt_id=attempt_id,
@@ -1172,6 +1276,15 @@ def _validate_task_payload(payload: Mapping[str, Any]) -> None:
     if missing:
         fields = ", ".join(dict.fromkeys(missing))
         raise ToolInputError(f"task_payload is missing required fields: {fields}")
+    normalized_allowed_data = [str(item).strip() for item in allowed_data]
+    unknown = sorted(set(normalized_allowed_data) - ALLOWED_DATA_COLUMNS)
+    if unknown:
+        allowed = ", ".join(sorted(ALLOWED_DATA_COLUMNS))
+        raise ToolInputError(
+            "task_payload.allowed_data contains unknown columns: "
+            f"{', '.join(unknown)}. Use only columns the factor actually needs. "
+            f"If the idea is price-only, use ['close']. Supported columns: {allowed}"
+        )
 
 
 def _compact_workflow(workflow: Any) -> dict[str, Any]:

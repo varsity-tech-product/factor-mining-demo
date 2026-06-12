@@ -51,8 +51,22 @@ agent to choose. Create the session with
 For a custom idea, create a direct `task_payload` and call
 `factor_mining_batch_test_create_custom_session`. The payload must include `task_id`,
 `title`, `category`, `description`, non-empty `allowed_data`, and `fwd_period`.
-`allowed_data` must include every input column the generated `plugin.py` needs,
-such as `close`, `volume`, `funding_rate_close`, or `open_interest_close`.
+Default `allowed_data` to `["close"]` for price-only ideas. Add only columns the
+generated `plugin.py` actually uses. Supported columns are `close`, `open`,
+`high`, `low`, `volume`, `quote_volume`, `taker_buy_volume`,
+`taker_sell_volume`, `taker_buy_quote_volume`, `taker_sell_quote_volume`,
+`taker_buy_trades`, `taker_sell_trades`, `open_interest_open`,
+`open_interest_high`, `open_interest_low`, `open_interest_close`,
+`funding_rate_open`, `funding_rate_high`, `funding_rate_low`,
+`funding_rate_close`, `global_account_long_percent`,
+`global_account_short_percent`, `global_account_long_short_ratio`,
+`top_position_long_percent`, `top_position_short_percent`,
+`top_position_long_short_ratio`, `top_account_long_percent`,
+`top_account_short_percent`, `top_account_long_short_ratio`,
+`liquidation_long_usd`, `liquidation_short_usd`,
+`binance_premium_index_open`, `binance_premium_index_high`,
+`binance_premium_index_low`, and `binance_premium_index_close`. Never invent
+column names or include broad categories that are not real input fields.
 Include useful hints, economic mechanisms, regime considerations, risk sources,
 and target behavior when they are available.
 
@@ -63,7 +77,10 @@ guidance to avoid near-duplicates. This context informs local revision only.
 Write or locate one `plugin.py`, then call
 `factor_mining_batch_test_parse_plugin_metadata`. The parser is static and must not
 import or execute generated code. When the metadata is valid and the user is
-ready to submit, call `factor_mining_batch_test_upload_backtest_wait`. Use
+ready to submit, call `factor_mining_batch_test_upload_backtest_wait` with the
+backend `session_id` returned by `factor_mining_batch_test_create_task_session`
+or `factor_mining_batch_test_create_custom_session`. Never use a local run id,
+task id, batch id, or attempt id as the session id. Use
 `fwd_period=7` when neither the task nor user specifies a horizon.
 Use `position_mode="both"` unless the user explicitly asks for
 `sigmoid_continuous` or `quantile_discrete`. Never submit `position_mode="cs_only"`;

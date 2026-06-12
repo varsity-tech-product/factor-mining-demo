@@ -10,7 +10,7 @@
     {
       "name": "factor-mining-batch-test",
       "description": "Run single-factor and serial batch Factor Mining workflows through bundled MCP tools.",
-        "version": "0.2.8",
+        "version": "0.2.9",
       "source": "./plugins/factor-mining-batch-test",
       "category": "Productivity",
       "tags": [

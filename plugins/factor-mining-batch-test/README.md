@@ -49,6 +49,12 @@ factor-card metrics, artifact status, fish metadata when present, and sanitized
 failure details. Batch mode adds attempt isolation; it should not hide the
 backtest result that a single-factor run would return.
 
+For custom ideas, use `allowed_data: ["close"]` by default and add only real
+input columns the generated `plugin.py` actually uses. Batch submissions normally
+omit `session_id`; the MCP tool creates the correct backend session from batch
+state. Do not use local batch, attempt, or client-run identifiers as backend
+session identifiers.
+
 Batch attempts fetch the default factor card plus standard CS backtest image
 artifacts when available. Supported MCP hosts receive those images as renderable
 image content and single-run-compatible saved image artifact paths, not only as

@@ -26,18 +26,40 @@ Some hosts display bundled MCP tool names with a provider prefix, such as
 5. For custom idea mode, build an explicit `task_payload` before
    `factor_mining_batch_test_batch_start`. The payload must include `task_id`,
    `title`, `category`, `description`, non-empty `allowed_data`, and
-   `fwd_period`. Call `factor_mining_batch_test_batch_start` with `idea` and
-   `task_payload`.
+   `fwd_period`. Default `allowed_data` to `["close"]` for price-only ideas.
+   Add only real columns that the current attempt's `plugin.py` will use:
+   `close`, `open`, `high`, `low`, `volume`, `quote_volume`,
+   `taker_buy_volume`, `taker_sell_volume`, `taker_buy_quote_volume`,
+   `taker_sell_quote_volume`, `taker_buy_trades`, `taker_sell_trades`,
+   `open_interest_open`, `open_interest_high`, `open_interest_low`,
+   `open_interest_close`, `funding_rate_open`, `funding_rate_high`,
+   `funding_rate_low`, `funding_rate_close`, `global_account_long_percent`,
+   `global_account_short_percent`, `global_account_long_short_ratio`,
+   `top_position_long_percent`, `top_position_short_percent`,
+   `top_position_long_short_ratio`, `top_account_long_percent`,
+   `top_account_short_percent`, `top_account_long_short_ratio`,
+   `liquidation_long_usd`, `liquidation_short_usd`,
+   `binance_premium_index_open`, `binance_premium_index_high`,
+   `binance_premium_index_low`, and `binance_premium_index_close`. Never invent
+   column names or include broad categories that are not real input fields. Call
+   `factor_mining_batch_test_batch_start` with `idea` and `task_payload`.
 6. Call `factor_mining_batch_test_batch_next` to get the next isolated attempt
    packet.
 7. For that attempt, write only the current attempt's `plugin.py` at the
    `plugin_path` returned by the MCP tool.
 8. Do not read sibling attempt directories. Do not reuse previous attempt
    implementation details.
-9. Use existing single-factor MCP tools for task/session/dedup/metadata
-   actions as needed.
+9. Use existing single-factor MCP tools for dedup and metadata actions as
+   needed. `factor_mining_batch_test_batch_next` does not return a backend
+   session. It returns only local batch/attempt information.
 10. Submit with `factor_mining_batch_test_batch_upload_backtest_wait`, not the generic
-   upload tool.
+   upload tool. The preferred batch submission call includes only `batch_id`,
+   `attempt_id`, and `plugin_path`; omit `session_id` so the MCP tool creates the
+   correct backend session from batch state. If you already called
+   `factor_mining_batch_test_create_task_session` or
+   `factor_mining_batch_test_create_custom_session`, you may pass only the
+   backend `session_id` returned by that tool. Never pass `batch_id`,
+   `attempt_id`, task id, plugin id, or any local run/client id as `session_id`.
 11. After each `factor_mining_batch_test_batch_upload_backtest_wait` call, immediately
    summarize that attempt's returned status, factor name/type, factor card,
    factor-card metrics, backtest image artifacts, artifact status, fish metadata
