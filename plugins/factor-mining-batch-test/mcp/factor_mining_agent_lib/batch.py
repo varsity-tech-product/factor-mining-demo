@@ -66,7 +66,7 @@ JOB_PUBLIC_KEYS = (
     "reason",
     "message",
 )
-ARTIFACT_PUBLIC_KEYS = ("status", "name", "content_type", "size_bytes", "sha256")
+ARTIFACT_PUBLIC_KEYS = ("status", "name", "kind", "content_type", "size_bytes", "sha256")
 FAMILY_KEYWORDS = (
     ("mean_reversion", ("mean_reversion", "mean reversion", "reversal", "contrarian", "zscore", "z-score")),
     ("momentum", ("momentum", "trend", "breakout", "relative_strength")),
@@ -406,6 +406,7 @@ def batch_results(batch_id: str, *, home: str | Path | None = None) -> dict[str,
         "position_mode": state.get("position_mode"),
         "counts": _counts(state),
         "attempts": attempts,
+        "comparison_rows": _comparison_rows(attempts),
         "best_attempts": _best_attempts(attempts),
         "isolation": _isolation_statement(),
     }
@@ -548,6 +549,18 @@ def _public_result_summary(result: Mapping[str, Any], *, state: Mapping[str, Any
         if public_artifact:
             public["artifact"] = public_artifact
 
+    factor_card = result.get("factor_card")
+    if isinstance(factor_card, Mapping):
+        public_factor_card = _sanitize_public_value(factor_card, state=state)
+        if public_factor_card:
+            public["factor_card"] = public_factor_card
+
+    artifacts = result.get("artifacts")
+    if isinstance(artifacts, Mapping):
+        public_artifacts = _public_artifacts_summary(artifacts, state=state)
+        if public_artifacts:
+            public["artifacts"] = public_artifacts
+
     return public
 
 
@@ -621,6 +634,67 @@ def _public_artifact_summary(artifact: Mapping[str, Any], *, state: Mapping[str,
         if value not in (None, "", [], {}):
             public[key] = value
     return public
+
+
+def _public_artifacts_summary(artifacts: Mapping[str, Any], *, state: Mapping[str, Any]) -> dict[str, Any]:
+    public: dict[str, Any] = {}
+    if artifacts.get("status"):
+        public["status"] = _sanitize_text(str(artifacts["status"]), state=state)
+    for key in ("files", "images"):
+        values = artifacts.get(key)
+        if not isinstance(values, list):
+            continue
+        public_values = [
+            item
+            for item in (_public_artifact_summary(value, state=state) for value in values if isinstance(value, Mapping))
+            if item
+        ]
+        if public_values:
+            public[key] = public_values
+    errors = _sanitize_public_value(artifacts.get("errors") or [], state=state)
+    if errors:
+        public["errors"] = errors
+    return public
+
+
+def _comparison_rows(attempts: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    return [_comparison_row(attempt) for attempt in attempts]
+
+
+def _comparison_row(attempt: Mapping[str, Any]) -> dict[str, Any]:
+    result = attempt.get("result") if isinstance(attempt.get("result"), Mapping) else {}
+    summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    metrics = summary.get("metrics") if isinstance(summary.get("metrics"), Mapping) else attempt.get("metrics") or {}
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), Mapping) else {}
+    images = artifacts.get("images") if isinstance(artifacts.get("images"), list) else []
+    fish = summary.get("fish") if isinstance(summary.get("fish"), Mapping) else {}
+    artifact = result.get("artifact") if isinstance(result.get("artifact"), Mapping) else {}
+    artifact_status = artifacts.get("status") or artifact.get("status")
+    row: dict[str, Any] = {
+        "index": attempt.get("index"),
+        "status": attempt.get("status"),
+        "factor_name": attempt.get("factor_name"),
+        "factor_type": attempt.get("factor_type"),
+        "factor_family": attempt.get("factor_family"),
+        "artifact_status": artifact_status,
+        "image_artifacts": [
+            str(item["name"])
+            for item in images
+            if isinstance(item, Mapping) and item.get("status") == "available" and item.get("name")
+        ],
+    }
+    for key in ("rank_ic", "rank_icir", "composite_sharpe", "sharpe", "annual_return", "annualized_return"):
+        value = _metric_value(metrics, key)
+        if value is not None:
+            row[key] = value
+    if fish.get("level"):
+        row["fish_level"] = fish.get("level")
+    return {key: value for key, value in row.items() if value not in (None, "", [], {})}
+
+
+def _metric_value(metrics: Mapping[str, Any], key: str) -> Any:
+    normalized = {_normalize_metric_key(name): value for name, value in metrics.items()}
+    return normalized.get(_normalize_metric_key(key))
 
 
 def _best_attempts(attempts: list[Mapping[str, Any]]) -> list[dict[str, Any]]:

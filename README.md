@@ -145,6 +145,10 @@ a single-factor run, including status, factor-card metrics, artifact status, and
 failure details when available. Batch mode only adds local state and context
 isolation between attempts.
 
+Batch attempts also fetch the default factor card plus standard CS backtest image
+artifacts when available. Final batch results include `comparison_rows` so agents
+can produce a table comparing every factor attempt.
+
 ## Local State
 
 Configuration is stored under `~/.factor-mining-batch-test/`. Run state is

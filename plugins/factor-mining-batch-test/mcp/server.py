@@ -56,7 +56,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "fmbt"
-SERVER_VERSION = "0.2.5"
+SERVER_VERSION = "0.2.6"
 MISSING_CREDENTIAL_MESSAGE = (
     "Factor Mining Batch Test setup is required. Call factor_mining_batch_test_setup_browser and enter the vt_ Agent API Key "
     "in the local browser page, not in chat."
@@ -69,6 +69,15 @@ TASK_PAYLOAD_REQUIRED_FIELDS = {
     "allowed_data",
     "fwd_period",
 }
+DEFAULT_FACTOR_CARD_ARTIFACT = "default_factor_card.json"
+DEFAULT_BACKTEST_ARTIFACTS = (
+    DEFAULT_FACTOR_CARD_ARTIFACT,
+    "default_factor_card.txt",
+    "default_group_return_plot.png",
+    "default_cs_profile_4panel.png",
+    "default_cs_nav_curves.png",
+)
+IMAGE_ARTIFACT_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg")
 
 
 class McpServerError(RuntimeError):
@@ -648,7 +657,7 @@ def _upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Mapping[
     session_id = _required_string(args, "session_id")
     plugin_path = Path(_required_string(args, "plugin_path"))
     client_run_id = _optional_string(args, "client_run_id") or f"fm-{uuid.uuid4().hex}"
-    artifact_name = _optional_string(args, "artifact_name") or "default_factor_card.json"
+    artifact_name = _optional_string(args, "artifact_name") or DEFAULT_FACTOR_CARD_ARTIFACT
     output_dir = _optional_string(args, "output_dir")
     if output_dir:
         _validate_artifact_name(artifact_name)
@@ -708,7 +717,7 @@ def _resume_run(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] 
     _config, client = _client_from_config(args, opener=opener, env=env)
     home = _configured_home(args, env)
     state = load_run_state(_required_string(args, "client_run_id"), home=home)
-    artifact_name = _optional_string(args, "artifact_name") or "default_factor_card.json"
+    artifact_name = _optional_string(args, "artifact_name") or DEFAULT_FACTOR_CARD_ARTIFACT
     output_dir = _optional_string(args, "output_dir")
     if output_dir:
         _validate_artifact_name(artifact_name)
@@ -761,7 +770,7 @@ def _get_job(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] | N
 
 def _get_artifact(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str] | None) -> Any:
     _config, client = _client_from_config(args, opener=opener, env=env)
-    name = _optional_string(args, "name") or "default_factor_card.json"
+    name = _optional_string(args, "name") or DEFAULT_FACTOR_CARD_ARTIFACT
     output_dir = _optional_string(args, "output_dir")
     if output_dir:
         _validate_artifact_name(name)
@@ -802,7 +811,7 @@ def _batch_upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Ma
     batch_id = _required_string(args, "batch_id")
     attempt_id = _required_string(args, "attempt_id")
     session_id = _required_string(args, "session_id")
-    artifact_name = _optional_string(args, "artifact_name") or "default_factor_card.json"
+    artifact_name = _optional_string(args, "artifact_name") or DEFAULT_FACTOR_CARD_ARTIFACT
     _validate_artifact_name(artifact_name)
 
     metadata_dict: dict[str, Any] = {}
@@ -954,9 +963,14 @@ def _run_wait_flow(
             time.sleep(poll_interval)
 
     card, artifact = _fetch_optional_artifact(client, state.job_ids, artifact_name, output_dir)
+    artifacts = _fetch_default_artifacts(client, state.job_ids, output_dir, primary_artifact=artifact)
     artifact_paths = dict(state.artifact_paths)
     if artifact.get("path"):
         artifact_paths[str(artifact_name)] = str(artifact["path"])
+    for item in artifacts.get("files") or []:
+        if isinstance(item, Mapping) and item.get("path") and item.get("name"):
+            artifact_paths[str(item["name"])] = str(item["path"])
+    if artifact_paths != state.artifact_paths:
         save_run_state(
             RunState(
                 client_run_id=state.client_run_id,
@@ -970,6 +984,8 @@ def _run_wait_flow(
             home=home,
         )
     summary = summarize_factor_card(card or {}, jobs=latest_jobs)
+    if isinstance(card, Mapping) and card:
+        summary["factor_card"] = card
     if isinstance(card, dict) and isinstance(card.get("fish"), dict):
         summary["fish"] = dict(card["fish"])
     if artifact["status"] == "unavailable":
@@ -986,6 +1002,8 @@ def _run_wait_flow(
         "workflow": _compact_workflow(latest_workflow),
         "jobs": latest_jobs,
         "artifact": artifact,
+        "artifacts": artifacts,
+        "factor_card": card or {},
         "summary": summary,
     }
 
@@ -1028,15 +1046,96 @@ def _fetch_optional_artifact(
     return None, artifact
 
 
-def _save_json_artifact(output_dir: str | None, name: str, payload: Any) -> str | None:
+def _fetch_default_artifacts(
+    client: ApiClient,
+    job_ids: list[str],
+    output_dir: str | None = None,
+    *,
+    primary_artifact: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    files: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if primary_artifact and primary_artifact.get("name"):
+        first = {
+            key: value
+            for key, value in primary_artifact.items()
+            if key in {"name", "status", "path"}
+        }
+        first["kind"] = _artifact_kind(str(primary_artifact["name"]))
+        files.append(first)
+        seen.add(str(primary_artifact["name"]))
+
+    for name in DEFAULT_BACKTEST_ARTIFACTS:
+        _validate_artifact_name(name)
+        if name in seen:
+            continue
+        fetched = False
+        for job_id in job_ids:
+            try:
+                payload = client.artifact(job_id, name)
+                item: dict[str, Any] = {
+                    "name": name,
+                    "job_id": job_id,
+                    "status": "available",
+                    "kind": _artifact_kind(name),
+                }
+                saved_path = _save_artifact(output_dir, name, payload)
+                if saved_path:
+                    item["path"] = saved_path
+                files.append(item)
+                fetched = True
+                break
+            except ApiError as exc:
+                if exc.status not in (404, 410):
+                    raise
+                errors.append({"name": name, "status": exc.status, "message": "Artifact is unavailable."})
+        if not fetched:
+            files.append({"name": name, "status": "unavailable", "kind": _artifact_kind(name)})
+
+    available_files = [item for item in files if item.get("status") == "available"]
+    images = [item for item in available_files if item.get("kind") == "image"]
+    if available_files and len(available_files) == len(DEFAULT_BACKTEST_ARTIFACTS):
+        status = "available"
+    elif available_files:
+        status = "partial"
+    else:
+        status = "unavailable"
+    result: dict[str, Any] = {"status": status, "files": files, "images": images}
+    if errors:
+        result["errors"] = errors
+    return result
+
+
+def _save_artifact(output_dir: str | None, name: str, payload: Any) -> str | None:
     if not output_dir:
         return None
     _validate_artifact_name(name)
     path = Path(output_dir)
     path.mkdir(parents=True, exist_ok=True)
     artifact_path = path / name
-    artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if isinstance(payload, bytes):
+        artifact_path.write_bytes(payload)
+    elif isinstance(payload, str):
+        artifact_path.write_text(payload, encoding="utf-8")
+    else:
+        artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return str(artifact_path)
+
+
+def _save_json_artifact(output_dir: str | None, name: str, payload: Any) -> str | None:
+    return _save_artifact(output_dir, name, payload)
+
+
+def _artifact_kind(name: str) -> str:
+    lower = name.lower()
+    if lower == DEFAULT_FACTOR_CARD_ARTIFACT:
+        return "factor_card"
+    if any(lower.endswith(suffix) for suffix in IMAGE_ARTIFACT_SUFFIXES):
+        return "image"
+    if lower.endswith(".txt"):
+        return "text"
+    return "artifact"
 
 
 def _validate_artifact_name(name: str) -> None:

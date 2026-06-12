@@ -76,6 +76,8 @@ metrics. Fetch the default factor card through
 `factor_mining_batch_test_get_artifact` when it is not already present and the job
 state says an artifact should be available. Use `factor_mining_batch_test_resume_run`
 after an interrupted session.
+When the result includes standard backtest image artifacts, mention the available
+image artifact names alongside the factor-card metrics.
 
 Never show backend job IDs, presigned URLs, local absolute paths, raw
 credentials, bearer tokens, or `plugin.py` source in user-facing summaries.

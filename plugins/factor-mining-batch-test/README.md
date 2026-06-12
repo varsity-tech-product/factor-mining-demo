@@ -49,5 +49,9 @@ factor-card metrics, artifact status, fish metadata when present, and sanitized
 failure details. Batch mode adds attempt isolation; it should not hide the
 backtest result that a single-factor run would return.
 
+Batch attempts fetch the default factor card plus standard CS backtest image
+artifacts when available. Final batch results include `comparison_rows` for an
+agent-generated comparison table across all attempts.
+
 Batch mode provides MCP state, file, and information-flow isolation between
 attempts. It does not guarantee host-level isolated model context.

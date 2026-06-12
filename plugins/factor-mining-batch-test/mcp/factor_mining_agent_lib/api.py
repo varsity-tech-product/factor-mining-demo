@@ -161,7 +161,10 @@ class ApiClient:
         raw = response.read()
         if not raw:
             return None
-        text = raw.decode("utf-8")
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw
         try:
             return json.loads(text)
         except json.JSONDecodeError:

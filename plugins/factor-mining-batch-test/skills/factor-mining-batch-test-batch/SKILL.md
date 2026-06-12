@@ -39,13 +39,17 @@ Some hosts display bundled MCP tool names with a provider prefix, such as
 10. Submit with `factor_mining_batch_test_batch_upload_backtest_wait`, not the generic
    upload tool.
 11. After each `factor_mining_batch_test_batch_upload_backtest_wait` call, immediately
-   summarize that attempt's returned status, factor name/type, factor-card metrics,
-   artifact status, fish metadata when present, and sanitized failure reasons.
+   summarize that attempt's returned status, factor name/type, factor card,
+   factor-card metrics, backtest image artifacts, artifact status, fish metadata
+   when present, and sanitized failure reasons.
    Batch mode should feel like repeated single-factor runs; the only difference is
    that each attempt gets isolated local state and restricted context.
 12. Repeat `factor_mining_batch_test_batch_next` until it returns `done=true`.
 13. Finish with `factor_mining_batch_test_batch_results`, and include each attempt's
-   returned result summary. Do not rely only on `best_attempts`.
+   returned result summary. Do not rely only on `best_attempts`. Always produce a
+   comparison table from `comparison_rows`, including status, factor name/type,
+   RankIC, ICIR, Sharpe/composite Sharpe when present, fish level, artifact
+   status, and available image artifact names.
 
 Use `position_mode="both"` unless the user explicitly asks for
 `sigmoid_continuous` or `quantile_discrete`. Never submit `position_mode="cs_only"`;

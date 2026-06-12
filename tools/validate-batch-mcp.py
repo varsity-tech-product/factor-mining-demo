@@ -17,6 +17,7 @@ sys.path.insert(0, str(MCP_ROOT))
 import server as mcp_server
 from factor_mining_agent_lib.batch import record_attempt_result
 from factor_mining_agent_lib.config import AgentConfig, save_config
+from factor_mining_agent_lib.run_state import RunState
 
 
 SKILL_PATH = ROOT / "plugins" / "factor-mining-batch-test" / "skills" / "factor-mining-batch-test-batch" / "SKILL.md"
@@ -86,6 +87,30 @@ class NetworkFailingApiClient(FakeApiClient):
             url="https://example.invalid/sessions/session-1/plugins/upload?token=secret",
             api_key=VALIDATION_KEY,
         )
+
+
+class ArtifactApiClient(FakeApiClient):
+    def workflow(self, session_id: str) -> dict[str, Any]:
+        return {"stage": "done", "session_id": session_id}
+
+    def job(self, job_id: str) -> dict[str, Any]:
+        return {"job_id": job_id, "status": "done", "position_mode": "cs_only"}
+
+    def artifact(self, job_id: str, name: str = "default_factor_card.json") -> Any:
+        artifacts: dict[str, Any] = {
+            "default_factor_card.json": {
+                "factor_name": "Artifact Bundle Momentum",
+                "metrics": {"rank_ic": 0.041, "rank_icir": 0.51, "composite_sharpe": 1.9},
+                "fish": {"level": "S"},
+            },
+            "default_factor_card.txt": "Artifact Bundle Momentum\\nRankIC 0.041\\n",
+            "default_group_return_plot.png": b"\\x89PNG\\r\\n\\x1a\\nGROUP",
+            "default_cs_profile_4panel.png": b"\\x89PNG\\r\\n\\x1a\\nPROFILE",
+            "default_cs_nav_curves.png": b"\\x89PNG\\r\\n\\x1a\\nNAV",
+        }
+        if name not in artifacts:
+            raise mcp_server.ApiError("missing artifact", status=404)
+        return artifacts[name]
 
 
 def _tool_schema(name: str) -> dict[str, Any]:
@@ -473,6 +498,126 @@ def test_batch_attempts_preserve_single_run_result_summary() -> None:
         mcp_server.ApiClient = original_client
 
 
+def test_run_wait_fetches_factor_card_and_default_backtest_images() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        home = Path(temp) / "home"
+        output_dir = Path(temp) / "artifacts"
+        state = RunState(
+            client_run_id="client-artifacts",
+            session_id="session-artifacts",
+            plugin_id="plugin-artifacts",
+            job_ids=["job-artifacts"],
+            plugin_path=str(Path(temp) / "plugin.py"),
+        )
+        result = mcp_server._run_wait_flow(
+            client=ArtifactApiClient(),
+            state=state,
+            artifact_name="default_factor_card.json",
+            output_dir=str(output_dir),
+            poll_interval=0,
+            timeout=1,
+            home=str(home),
+        )
+
+        assert result["status"] == "succeeded"
+        assert result["summary"]["metrics"]["rank_ic"] == 0.041
+        assert result["factor_card"]["fish"]["level"] == "S"
+        artifacts = result["artifacts"]
+        assert artifacts["status"] == "available"
+        assert {item["name"] for item in artifacts["images"]} == {
+            "default_group_return_plot.png",
+            "default_cs_profile_4panel.png",
+            "default_cs_nav_curves.png",
+        }
+        for name in (
+            "default_factor_card.json",
+            "default_factor_card.txt",
+            "default_group_return_plot.png",
+            "default_cs_profile_4panel.png",
+            "default_cs_nav_curves.png",
+        ):
+            assert (output_dir / name).exists(), name
+
+
+def test_batch_results_include_factor_card_images_and_comparison_rows() -> None:
+    original_client = mcp_server.ApiClient
+    mcp_server.ApiClient = FakeApiClient
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            _save_validation_config(home)
+            start = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_start",
+                {
+                    "count": 1,
+                    "mode": "custom_idea",
+                    "idea": "Validate comparison rows.",
+                    "task_payload": TASK_PAYLOAD,
+                    "home": str(home),
+                },
+            )
+            batch_id = start["batch_id"]
+            first = mcp_server.call_tool("factor_mining_batch_test_batch_next", {"batch_id": batch_id, "home": str(home)})
+            result = {
+                "ok": True,
+                "status": "succeeded",
+                "terminal_status": "succeeded",
+                "factor_card": {
+                    "factor_name": "Comparison Momentum",
+                    "metrics": {"rank_ic": 0.052, "rank_icir": 0.62, "composite_sharpe": 2.1},
+                    "fish": {"level": "S"},
+                    "download_url": "https://example.invalid/card?X-Amz-Signature=secret",
+                },
+                "summary": {
+                    "factor_name": "Comparison Momentum",
+                    "metrics": {"rank_ic": 0.052, "rank_icir": 0.62, "composite_sharpe": 2.1},
+                    "fish": {"level": "S"},
+                },
+                "artifacts": {
+                    "status": "available",
+                    "images": [
+                        {
+                            "name": "default_group_return_plot.png",
+                            "kind": "image",
+                            "status": "available",
+                            "path": str(home / "secret" / "default_group_return_plot.png"),
+                        }
+                    ],
+                    "files": [
+                        {
+                            "name": "default_factor_card.json",
+                            "kind": "factor_card",
+                            "status": "available",
+                            "path": str(home / "secret" / "default_factor_card.json"),
+                        }
+                    ],
+                },
+            }
+            record_attempt_result(
+                batch_id=batch_id,
+                attempt_id=first["attempt_id"],
+                result=result,
+                metadata={"factor_name": "Comparison Momentum", "factor_type": "comparison_momentum"},
+                home=home,
+            )
+            results = mcp_server.call_tool("factor_mining_batch_test_batch_results", {"batch_id": batch_id, "home": str(home)})
+            attempt = results["attempts"][0]
+            row = results["comparison_rows"][0]
+            assert attempt["result"]["factor_card"]["fish"]["level"] == "S"
+            assert attempt["result"]["artifacts"]["images"][0]["name"] == "default_group_return_plot.png"
+            assert row["factor_name"] == "Comparison Momentum"
+            assert row["rank_ic"] == 0.052
+            assert row["rank_icir"] == 0.62
+            assert row["composite_sharpe"] == 2.1
+            assert row["fish_level"] == "S"
+            assert row["image_artifacts"] == ["default_group_return_plot.png"]
+            rendered = json.dumps(results, sort_keys=True)
+            assert "X-Amz-Signature" not in rendered
+            assert str(home) not in rendered
+    finally:
+        mcp_server.ApiClient = original_client
+
+
 def main() -> int:
     test_tools_and_existing_schema()
     test_status_without_config_returns_setup_required()
@@ -482,6 +627,8 @@ def main() -> int:
     test_batch_isolation_and_sanitization()
     test_batch_upload_network_failure_blocks_without_failed_attempt_or_advancing()
     test_batch_attempts_preserve_single_run_result_summary()
+    test_run_wait_fetches_factor_card_and_default_backtest_images()
+    test_batch_results_include_factor_card_images_and_comparison_rows()
     print("batch MCP validation passed")
     return 0
 

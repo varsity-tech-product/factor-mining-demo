@@ -1,6 +1,6 @@
 {
   "name": "factor-mining-batch-test",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Local-MCP batch test plugin for direct vt_ Agent API Key Factor Mining workflows.",
   "author": {
     "name": "Varsity Tech Product",
