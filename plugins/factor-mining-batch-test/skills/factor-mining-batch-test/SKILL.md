@@ -76,9 +76,10 @@ metrics. Fetch the default factor card through
 `factor_mining_batch_test_get_artifact` when it is not already present and the job
 state says an artifact should be available. Use `factor_mining_batch_test_resume_run`
 after an interrupted session.
-When the result includes standard backtest image artifacts, mention the available
-rendered backtest images alongside the factor-card metrics when the MCP host
-displays them.
+When `artifact.image_artifacts` or `artifacts.images` includes saved image paths,
+show those original images in the conversation when the host supports image
+display. Do not merely list the image filenames, and do not print local absolute
+paths as text.
 
 Never show backend job IDs, presigned URLs, local absolute paths, raw
 credentials, bearer tokens, or `plugin.py` source in user-facing summaries.

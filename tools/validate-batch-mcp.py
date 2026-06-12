@@ -573,6 +573,20 @@ def test_batch_results_include_factor_card_images_and_comparison_rows() -> None:
                     "metrics": {"rank_ic": 0.052, "rank_icir": 0.62, "composite_sharpe": 2.1},
                     "fish": {"level": "S"},
                 },
+                "artifact": {
+                    "name": "default_factor_card.json",
+                    "kind": "factor_card",
+                    "status": "available",
+                    "path": str(home / "secret" / "default_factor_card.json"),
+                    "image_artifacts": [
+                        {
+                            "name": "default_group_return_plot.png",
+                            "kind": "image",
+                            "status": "available",
+                            "path": str(home / "secret" / "default_group_return_plot.png"),
+                        }
+                    ],
+                },
                 "artifacts": {
                     "status": "available",
                     "images": [
@@ -604,7 +618,11 @@ def test_batch_results_include_factor_card_images_and_comparison_rows() -> None:
             attempt = results["attempts"][0]
             row = results["comparison_rows"][0]
             assert attempt["result"]["factor_card"]["fish"]["level"] == "S"
+            assert attempt["result"]["artifact"]["image_artifacts"][0]["path"] == str(
+                home / "secret" / "default_group_return_plot.png"
+            )
             assert attempt["result"]["artifacts"]["images"][0]["name"] == "default_group_return_plot.png"
+            assert attempt["result"]["artifacts"]["images"][0]["path"] == str(home / "secret" / "default_group_return_plot.png")
             assert row["factor_name"] == "Comparison Momentum"
             assert row["rank_ic"] == 0.052
             assert row["rank_icir"] == 0.62
@@ -613,12 +631,12 @@ def test_batch_results_include_factor_card_images_and_comparison_rows() -> None:
             assert row["image_artifacts"] == ["default_group_return_plot.png"]
             rendered = json.dumps(results, sort_keys=True)
             assert "X-Amz-Signature" not in rendered
-            assert str(home) not in rendered
+            assert "plugin.py" not in rendered
     finally:
         mcp_server.ApiClient = original_client
 
 
-def test_batch_results_mcp_response_embeds_images_without_leaking_paths() -> None:
+def test_batch_results_mcp_response_embeds_images_and_single_run_image_paths() -> None:
     original_client = mcp_server.ApiClient
     mcp_server.ApiClient = FakeApiClient
     try:
@@ -683,7 +701,7 @@ def test_batch_results_mcp_response_embeds_images_without_leaking_paths() -> Non
             assert image_blocks[0]["mimeType"] == "image/png"
             assert image_blocks[0]["data"]
             rendered_text = "\n".join(block["text"] for block in text_blocks)
-            assert str(home) not in rendered_text
+            assert str(image_path) in rendered_text
             assert "default_group_return_plot.png" in rendered_text
     finally:
         mcp_server.ApiClient = original_client
@@ -730,7 +748,7 @@ def main() -> int:
     test_batch_attempts_preserve_single_run_result_summary()
     test_run_wait_fetches_factor_card_and_default_backtest_images()
     test_batch_results_include_factor_card_images_and_comparison_rows()
-    test_batch_results_mcp_response_embeds_images_without_leaking_paths()
+    test_batch_results_mcp_response_embeds_images_and_single_run_image_paths()
     test_mcp_hidden_images_render_without_leaking_paths()
     print("batch MCP validation passed")
     return 0

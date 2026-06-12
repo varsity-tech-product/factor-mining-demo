@@ -51,8 +51,11 @@ backtest result that a single-factor run would return.
 
 Batch attempts fetch the default factor card plus standard CS backtest image
 artifacts when available. Supported MCP hosts receive those images as renderable
-image content, not only as artifact names. Final batch results include
-`comparison_rows` for an agent-generated comparison table across all attempts.
+image content and single-run-compatible saved image artifact paths, not only as
+artifact names. Agents should use those paths to display the saved originals and
+avoid printing local absolute paths in text summaries. Final batch results
+include `comparison_rows` for an agent-generated comparison table across all
+attempts.
 
 Batch mode provides MCP state, file, and information-flow isolation between
 attempts. It does not guarantee host-level isolated model context.

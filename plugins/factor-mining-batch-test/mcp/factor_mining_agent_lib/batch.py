@@ -662,7 +662,27 @@ def _public_artifact_summary(artifact: Mapping[str, Any], *, state: Mapping[str,
         value = _sanitize_public_value(artifact.get(key), state=state)
         if value not in (None, "", [], {}):
             public[key] = value
+    if _is_public_image_artifact(artifact):
+        path = artifact.get("path")
+        if isinstance(path, str) and path:
+            public["path"] = path
+    image_artifacts = artifact.get("image_artifacts")
+    if isinstance(image_artifacts, list):
+        public_images = [
+            item
+            for item in (_public_artifact_summary(value, state=state) for value in image_artifacts if isinstance(value, Mapping))
+            if item
+        ]
+        if public_images:
+            public["image_artifacts"] = public_images
     return public
+
+
+def _is_public_image_artifact(artifact: Mapping[str, Any]) -> bool:
+    name = artifact.get("name")
+    if artifact.get("kind") == "image":
+        return True
+    return isinstance(name, str) and name.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"))
 
 
 def _public_artifacts_summary(artifacts: Mapping[str, Any], *, state: Mapping[str, Any]) -> dict[str, Any]:
@@ -826,7 +846,10 @@ def _sanitize_public_value(value: Any, *, state: Mapping[str, Any]) -> Any:
             normalized_key = key_str.lower()
             if any(drop_key in normalized_key for drop_key in PUBLIC_DROP_KEYS):
                 continue
-            clean_item = _sanitize_public_value(item, state=state)
+            if key_str == "path" and _is_public_image_artifact(value) and isinstance(item, str):
+                clean_item = item
+            else:
+                clean_item = _sanitize_public_value(item, state=state)
             if clean_item not in (None, "", [], {}):
                 sanitized[key_str] = clean_item
         return sanitized

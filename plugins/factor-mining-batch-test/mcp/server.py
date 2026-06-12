@@ -59,7 +59,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "fmbt"
-SERVER_VERSION = "0.2.7"
+SERVER_VERSION = "0.2.8"
 MCP_IMAGE_SOURCES_KEY = "_mcp_images"
 MAX_MCP_IMAGES = 12
 MAX_MCP_IMAGE_BYTES = 5 * 1024 * 1024
@@ -980,6 +980,8 @@ def _run_wait_flow(
 
     card, artifact = _fetch_optional_artifact(client, state.job_ids, artifact_name, output_dir)
     artifacts = _fetch_default_artifacts(client, state.job_ids, output_dir, primary_artifact=artifact)
+    if artifacts.get("images"):
+        artifact["image_artifacts"] = list(artifacts["images"])
     artifact_paths = dict(state.artifact_paths)
     if artifact.get("path"):
         artifact_paths[str(artifact_name)] = str(artifact["path"])

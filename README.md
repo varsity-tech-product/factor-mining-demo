@@ -147,8 +147,11 @@ isolation between attempts.
 
 Batch attempts also fetch the default factor card plus standard CS backtest image
 artifacts when available. Supported MCP hosts receive those images as renderable
-image content, not only as artifact names. Final batch results include
-`comparison_rows` so agents can produce a table comparing every factor attempt.
+image content and single-run-compatible saved image artifact paths, not only as
+artifact names. Agents should use those paths to display the saved originals and
+avoid printing local absolute paths in text summaries. Final batch results
+include `comparison_rows` so agents can produce a table comparing every factor
+attempt.
 
 ## Local State
 
