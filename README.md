@@ -123,7 +123,9 @@ Use Factor Mining Batch Test to resume my run and summarize results.
 
 The single-factor flow keeps the setup, task/session creation, static metadata
 parse, dedup context, upload/backtest wait, resume, artifact retrieval, and
-clear-config workflows behind MCP tools.
+clear-config workflows behind MCP tools. When backtest images are available,
+single-factor results include `display_markdown.images` with ready-to-render
+Markdown image tags.
 
 For custom ideas, use `allowed_data: ["close"]` by default and add only real
 columns the generated `plugin.py` actually uses. The MCP tools reject unknown
@@ -156,10 +158,11 @@ isolation between attempts.
 Batch attempts also fetch the default factor card plus standard CS backtest image
 artifacts when available. Supported MCP hosts receive those images as renderable
 image content and single-run-compatible saved image artifact paths, not only as
-artifact names. Agents should use those paths to display the saved originals and
-avoid printing local absolute paths in text summaries. Final batch results
-include `comparison_rows` so agents can produce a table comparing every factor
-attempt.
+artifact names. Batch results also include `display_markdown.images` with
+ready-to-render Markdown image tags. Agents should copy those image tags into
+the user-visible response and avoid printing local absolute paths as plain text.
+Final batch results include `comparison_rows` so agents can produce a table
+comparing every factor attempt.
 
 ## Local State
 

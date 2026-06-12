@@ -5,6 +5,10 @@ API Key workflows. It preserves the single-factor flow and adds serial batch
 factor mining through the same MCP server. The final remote-MCP production
 package will come later.
 
+Single-factor and batch results include `display_markdown.images` when backtest
+images are available. Agents should copy those ready-to-render Markdown image
+tags into the user-visible response instead of listing filenames only.
+
 Key entry happens through a local browser setup page opened by
 `factor_mining_batch_test_setup_browser`. Do not paste the key into chat.
 
@@ -58,10 +62,11 @@ session identifiers.
 Batch attempts fetch the default factor card plus standard CS backtest image
 artifacts when available. Supported MCP hosts receive those images as renderable
 image content and single-run-compatible saved image artifact paths, not only as
-artifact names. Agents should use those paths to display the saved originals and
-avoid printing local absolute paths in text summaries. Final batch results
-include `comparison_rows` for an agent-generated comparison table across all
-attempts.
+artifact names. Batch results also include `display_markdown.images` with
+ready-to-render Markdown image tags. Agents should copy those image tags into
+the user-visible response and avoid printing local absolute paths as plain text.
+Final batch results include `comparison_rows` for an agent-generated comparison
+table across all attempts.
 
 Batch mode provides MCP state, file, and information-flow isolation between
 attempts. It does not guarantee host-level isolated model context.

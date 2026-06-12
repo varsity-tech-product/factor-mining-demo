@@ -694,6 +694,12 @@ def test_run_wait_fetches_factor_card_and_default_backtest_images() -> None:
             "default_cs_nav_curves.png",
         ):
             assert (output_dir / name).exists(), name
+        for name in (
+            "default_group_return_plot.png",
+            "default_cs_profile_4panel.png",
+            "default_cs_nav_curves.png",
+        ):
+            assert f"![{name}](<{output_dir / name}>)" in result["display_markdown"]["images"]
 
 
 def test_batch_results_include_factor_card_images_and_comparison_rows() -> None:
@@ -780,12 +786,15 @@ def test_batch_results_include_factor_card_images_and_comparison_rows() -> None:
             )
             assert attempt["result"]["artifacts"]["images"][0]["name"] == "default_group_return_plot.png"
             assert attempt["result"]["artifacts"]["images"][0]["path"] == str(home / "secret" / "default_group_return_plot.png")
+            expected_markdown = f"![default_group_return_plot.png](<{home / 'secret' / 'default_group_return_plot.png'}>)"
+            assert expected_markdown in attempt["result"]["display_markdown"]["images"]
             assert row["factor_name"] == "Comparison Momentum"
             assert row["rank_ic"] == 0.052
             assert row["rank_icir"] == 0.62
             assert row["composite_sharpe"] == 2.1
             assert row["fish_level"] == "S"
             assert row["image_artifacts"] == ["default_group_return_plot.png"]
+            assert expected_markdown in row["display_markdown"]["images"]
             rendered = json.dumps(results, sort_keys=True)
             assert "X-Amz-Signature" not in rendered
             assert "plugin.py" not in rendered
@@ -859,6 +868,7 @@ def test_batch_results_mcp_response_embeds_images_and_single_run_image_paths() -
             assert image_blocks[0]["data"]
             rendered_text = "\n".join(block["text"] for block in text_blocks)
             assert str(image_path) in rendered_text
+            assert f"![default_group_return_plot.png](<{image_path}>)" in rendered_text
             assert "default_group_return_plot.png" in rendered_text
     finally:
         mcp_server.ApiClient = original_client

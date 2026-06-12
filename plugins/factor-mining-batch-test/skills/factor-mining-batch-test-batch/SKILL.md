@@ -66,7 +66,11 @@ Some hosts display bundled MCP tool names with a provider prefix, such as
    when present, and sanitized failure reasons. When `artifact.image_artifacts`
    or `artifacts.images` includes saved image paths, show those original images
    in the conversation when the host supports image display. Do not merely list
-   the image filenames, and do not print local absolute paths as text.
+   the image filenames, and do not print local absolute paths as text. If
+   `display_markdown.images` is present, copy those Markdown image lines exactly
+   into the user-visible response; a local path inside a Markdown image target
+   is allowed because it renders the image instead of showing the path as plain
+   text.
    Batch mode should feel like repeated single-factor runs; the only difference is
    that each attempt gets isolated local state and restricted context.
 12. Repeat `factor_mining_batch_test_batch_next` until it returns `done=true`.
@@ -74,8 +78,9 @@ Some hosts display bundled MCP tool names with a provider prefix, such as
    returned result summary. Do not rely only on `best_attempts`. Always produce a
    comparison table from `comparison_rows`, including status, factor name/type,
    RankIC, ICIR, Sharpe/composite Sharpe when present, fish level, artifact
-   status, and the saved backtest images. Use the returned image artifact paths
-   for display; use concise filenames only in text summaries.
+   status, and the saved backtest images. Use `display_markdown.images` from
+   each comparison row for display; use concise filenames only in text
+   summaries.
 
 Use `position_mode="both"` unless the user explicitly asks for
 `sigmoid_continuous` or `quantile_discrete`. Never submit `position_mode="cs_only"`;

@@ -96,7 +96,10 @@ after an interrupted session.
 When `artifact.image_artifacts` or `artifacts.images` includes saved image paths,
 show those original images in the conversation when the host supports image
 display. Do not merely list the image filenames, and do not print local absolute
-paths as text.
+paths as text. If `display_markdown.images` is present, copy those Markdown
+image lines exactly into the user-visible response; a local path inside a
+Markdown image target is allowed because it renders the image instead of showing
+the path as plain text.
 
 Never show backend job IDs, presigned URLs, local absolute paths, raw
 credentials, bearer tokens, or `plugin.py` source in user-facing summaries.

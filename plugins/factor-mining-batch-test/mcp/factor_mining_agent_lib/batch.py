@@ -594,6 +594,10 @@ def _public_result_summary(result: Mapping[str, Any], *, state: Mapping[str, Any
         if public_artifacts:
             public["artifacts"] = public_artifacts
 
+    image_markdown = _display_markdown_images(public)
+    if image_markdown:
+        public["display_markdown"] = {"images": image_markdown}
+
     return public
 
 
@@ -736,6 +740,9 @@ def _comparison_row(attempt: Mapping[str, Any]) -> dict[str, Any]:
             if isinstance(item, Mapping) and item.get("status") == "available" and item.get("name")
         ],
     }
+    image_markdown = _display_markdown_images(result)
+    if image_markdown:
+        row["display_markdown"] = {"images": image_markdown}
     for key in ("rank_ic", "rank_icir", "composite_sharpe", "sharpe", "annual_return", "annualized_return"):
         value = _metric_value(metrics, key)
         if value is not None:
@@ -743,6 +750,39 @@ def _comparison_row(attempt: Mapping[str, Any]) -> dict[str, Any]:
     if fish.get("level"):
         row["fish_level"] = fish.get("level")
     return {key: value for key, value in row.items() if value not in (None, "", [], {})}
+
+
+def _display_markdown_images(payload: Mapping[str, Any]) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    _collect_display_markdown_images(payload.get("artifact"), lines, seen)
+    _collect_display_markdown_images(payload.get("artifacts"), lines, seen)
+    return lines
+
+
+def _collect_display_markdown_images(value: Any, lines: list[str], seen: set[str]) -> None:
+    if isinstance(value, Mapping):
+        name = value.get("name")
+        path = value.get("path")
+        if isinstance(name, str) and isinstance(path, str) and _is_public_image_artifact(value):
+            line = _markdown_image(name, path)
+            if line not in seen:
+                seen.add(line)
+                lines.append(line)
+        for key in ("image_artifacts", "images", "files"):
+            item = value.get(key)
+            if isinstance(item, list):
+                _collect_display_markdown_images(item, lines, seen)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect_display_markdown_images(item, lines, seen)
+
+
+def _markdown_image(name: str, path: str) -> str:
+    alt = name.replace("[", "\\[").replace("]", "\\]")
+    target = path.replace(">", "%3E")
+    return f"![{alt}](<{target}>)"
 
 
 def _metric_value(metrics: Mapping[str, Any], key: str) -> Any:
@@ -848,6 +888,11 @@ def _sanitize_public_value(value: Any, *, state: Mapping[str, Any]) -> Any:
         for key, item in value.items():
             key_str = str(key)
             normalized_key = key_str.lower()
+            if normalized_key == "display_markdown" and isinstance(item, Mapping):
+                display_markdown = _public_display_markdown(item)
+                if display_markdown:
+                    sanitized[key_str] = display_markdown
+                continue
             if any(drop_key in normalized_key for drop_key in PUBLIC_DROP_KEYS):
                 continue
             if key_str == "path" and _is_public_image_artifact(value) and isinstance(item, str):
@@ -858,6 +903,18 @@ def _sanitize_public_value(value: Any, *, state: Mapping[str, Any]) -> Any:
                 sanitized[key_str] = clean_item
         return sanitized
     return value
+
+
+def _public_display_markdown(value: Mapping[str, Any]) -> dict[str, Any]:
+    images = value.get("images")
+    if not isinstance(images, list):
+        return {}
+    public_images = [
+        str(item)
+        for item in images
+        if isinstance(item, str) and item.startswith("![") and "](" in item and item.endswith(")")
+    ]
+    return {"images": public_images} if public_images else {}
 
 
 def _sanitize_error(error: str, *, state: Mapping[str, Any]) -> str:

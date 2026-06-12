@@ -59,7 +59,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "fmbt"
-SERVER_VERSION = "0.2.9"
+SERVER_VERSION = "0.2.10"
 MCP_IMAGE_SOURCES_KEY = "_mcp_images"
 MAX_MCP_IMAGES = 12
 MAX_MCP_IMAGE_BYTES = 5 * 1024 * 1024
@@ -1115,7 +1115,7 @@ def _run_wait_flow(
         if artifact.get("errors"):
             summary["artifact_errors"] = artifact["errors"]
     outcome = terminal_outcome(latest_workflow or {}, latest_jobs)
-    return {
+    result = {
         **outcome,
         "client_run_id": state.client_run_id,
         "session_id": state.session_id,
@@ -1128,6 +1128,10 @@ def _run_wait_flow(
         "factor_card": card or {},
         "summary": summary,
     }
+    image_markdown = _display_markdown_images(result)
+    if image_markdown:
+        result["display_markdown"] = {"images": image_markdown}
+    return result
 
 
 def _fetch_optional_artifact(
@@ -1449,6 +1453,23 @@ def _mcp_image_sources(payload: Any) -> list[dict[str, Any]]:
     seen: set[str] = set()
     _collect_mcp_image_sources(payload, sources, seen)
     return sources
+
+
+def _display_markdown_images(payload: Any) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for source in _mcp_image_sources(payload):
+        line = _markdown_image(str(source["name"]), str(source["path"]))
+        if line not in seen:
+            seen.add(line)
+            lines.append(line)
+    return lines
+
+
+def _markdown_image(name: str, path: str) -> str:
+    alt = name.replace("[", "\\[").replace("]", "\\]")
+    target = path.replace(">", "%3E")
+    return f"![{alt}](<{target}>)"
 
 
 def _collect_mcp_image_sources(value: Any, sources: list[dict[str, Any]], seen: set[str]) -> None:
