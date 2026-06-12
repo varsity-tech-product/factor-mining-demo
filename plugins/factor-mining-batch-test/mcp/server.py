@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 import os
 import secrets
 import sys
@@ -32,6 +34,7 @@ from factor_mining_agent_lib.batch import (
     batch_status,
     cancel_batch,
     create_batch,
+    load_batch_state,
     mark_attempt_system_error,
     next_attempt_packet,
     prepare_attempt_upload,
@@ -56,7 +59,10 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "fmbt"
-SERVER_VERSION = "0.2.6"
+SERVER_VERSION = "0.2.7"
+MCP_IMAGE_SOURCES_KEY = "_mcp_images"
+MAX_MCP_IMAGES = 12
+MAX_MCP_IMAGE_BYTES = 5 * 1024 * 1024
 MISSING_CREDENTIAL_MESSAGE = (
     "Factor Mining Batch Test setup is required. Call factor_mining_batch_test_setup_browser and enter the vt_ Agent API Key "
     "in the local browser page, not in chat."
@@ -865,13 +871,17 @@ def _batch_upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Ma
             home=home,
         )
 
-    return record_attempt_result(
+    recorded = record_attempt_result(
         batch_id=batch_id,
         attempt_id=attempt_id,
         result=result,
         metadata=metadata_dict,
         home=home,
     )
+    images = _mcp_image_sources(result)
+    if images:
+        recorded[MCP_IMAGE_SOURCES_KEY] = images
+    return recorded
 
 
 def _batch_status(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> Any:
@@ -879,7 +889,13 @@ def _batch_status(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> 
 
 
 def _batch_results(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> Any:
-    return batch_results(_required_string(args, "batch_id"), home=_configured_home(args, env))
+    home = _configured_home(args, env)
+    batch_id = _required_string(args, "batch_id")
+    result = batch_results(batch_id, home=home)
+    images = _mcp_image_sources(load_batch_state(batch_id, home=home))
+    if images:
+        result[MCP_IMAGE_SOURCES_KEY] = images
+    return result
 
 
 def _batch_cancel(args: Mapping[str, Any], *, env: Mapping[str, str] | None) -> Any:
@@ -1233,6 +1249,8 @@ def _redact_payload(value: Any) -> Any:
         redacted: dict[str, Any] = {}
         for key, item in value.items():
             key_str = str(key)
+            if key_str == MCP_IMAGE_SOURCES_KEY:
+                continue
             if key_str.lower() in {"api_key", "authorization", "token", "credential", "secret", "password"}:
                 continue
             redacted[key_str] = _redact_payload(item)
@@ -1277,14 +1295,95 @@ def handle_request(message: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def _mcp_tool_result(payload: Any) -> dict[str, Any]:
+    content: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": json.dumps(_redact_payload(payload), separators=(",", ":"), sort_keys=True),
+        }
+    ]
+    content.extend(_mcp_image_content_blocks(payload))
     return {
-        "content": [
-            {
-                "type": "text",
-                "text": json.dumps(_redact_payload(payload), separators=(",", ":"), sort_keys=True),
-            }
-        ]
+        "content": content
     }
+
+
+def _mcp_image_content_blocks(payload: Any) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for source in _mcp_image_sources(payload)[:MAX_MCP_IMAGES]:
+        path = Path(str(source["path"]))
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size <= 0 or size > MAX_MCP_IMAGE_BYTES:
+            continue
+        mime_type = _image_mime_type(str(source["name"]), source.get("content_type"))
+        if not mime_type.startswith("image/"):
+            continue
+        try:
+            data = base64.b64encode(path.read_bytes()).decode("ascii")
+        except OSError:
+            continue
+        blocks.append({"type": "text", "text": f"Backtest image: {source['name']}"})
+        blocks.append({"type": "image", "data": data, "mimeType": mime_type})
+    return blocks
+
+
+def _mcp_image_sources(payload: Any) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    _collect_mcp_image_sources(payload, sources, seen)
+    return sources
+
+
+def _collect_mcp_image_sources(value: Any, sources: list[dict[str, Any]], seen: set[str]) -> None:
+    if isinstance(value, Mapping):
+        hidden_sources = value.get(MCP_IMAGE_SOURCES_KEY)
+        if isinstance(hidden_sources, list):
+            for item in hidden_sources:
+                _collect_mcp_image_sources(item, sources, seen)
+        source = _mcp_image_source_from_mapping(value)
+        if source:
+            key = source["path"]
+            if key not in seen:
+                seen.add(key)
+                sources.append(source)
+        for key, item in value.items():
+            if str(key) == MCP_IMAGE_SOURCES_KEY:
+                continue
+            _collect_mcp_image_sources(item, sources, seen)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect_mcp_image_sources(item, sources, seen)
+
+
+def _mcp_image_source_from_mapping(value: Mapping[str, Any]) -> dict[str, Any] | None:
+    if value.get("status") not in (None, "available"):
+        return None
+    name = value.get("name")
+    path_value = value.get("path")
+    if not isinstance(name, str) or not isinstance(path_value, str):
+        return None
+    try:
+        _validate_artifact_name(name)
+    except ToolInputError:
+        return None
+    if _artifact_kind(name) != "image" and value.get("kind") != "image":
+        return None
+    path = Path(path_value)
+    if path.name != name or not path.is_file():
+        return None
+    return {"name": name, "path": str(path), "content_type": value.get("content_type")}
+
+
+def _image_mime_type(name: str, content_type: Any = None) -> str:
+    if isinstance(content_type, str) and content_type.startswith("image/"):
+        return content_type
+    guessed, _ = mimetypes.guess_type(name)
+    if guessed and guessed.startswith("image/"):
+        return guessed
+    return "image/png"
 
 
 def _mcp_tool_error(exc: Exception) -> dict[str, Any]:

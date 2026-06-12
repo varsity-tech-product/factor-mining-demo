@@ -49,7 +49,7 @@ Some hosts display bundled MCP tool names with a provider prefix, such as
    returned result summary. Do not rely only on `best_attempts`. Always produce a
    comparison table from `comparison_rows`, including status, factor name/type,
    RankIC, ICIR, Sharpe/composite Sharpe when present, fish level, artifact
-   status, and available image artifact names.
+   status, and the rendered backtest images when the MCP host displays them.
 
 Use `position_mode="both"` unless the user explicitly asks for
 `sigmoid_continuous` or `quantile_discrete`. Never submit `position_mode="cs_only"`;

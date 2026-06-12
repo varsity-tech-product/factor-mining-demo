@@ -146,8 +146,9 @@ failure details when available. Batch mode only adds local state and context
 isolation between attempts.
 
 Batch attempts also fetch the default factor card plus standard CS backtest image
-artifacts when available. Final batch results include `comparison_rows` so agents
-can produce a table comparing every factor attempt.
+artifacts when available. Supported MCP hosts receive those images as renderable
+image content, not only as artifact names. Final batch results include
+`comparison_rows` so agents can produce a table comparing every factor attempt.
 
 ## Local State
 

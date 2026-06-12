@@ -618,6 +618,107 @@ def test_batch_results_include_factor_card_images_and_comparison_rows() -> None:
         mcp_server.ApiClient = original_client
 
 
+def test_batch_results_mcp_response_embeds_images_without_leaking_paths() -> None:
+    original_client = mcp_server.ApiClient
+    mcp_server.ApiClient = FakeApiClient
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            image_dir = home / "secret"
+            image_dir.mkdir(parents=True)
+            image_path = image_dir / "default_group_return_plot.png"
+            image_path.write_bytes(b"\x89PNG\r\n\x1a\nbatch-image")
+            _save_validation_config(home)
+            start = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_start",
+                {
+                    "count": 1,
+                    "mode": "custom_idea",
+                    "idea": "Validate GUI image rendering.",
+                    "task_payload": TASK_PAYLOAD,
+                    "home": str(home),
+                },
+            )
+            batch_id = start["batch_id"]
+            first = mcp_server.call_tool("factor_mining_batch_test_batch_next", {"batch_id": batch_id, "home": str(home)})
+            record_attempt_result(
+                batch_id=batch_id,
+                attempt_id=first["attempt_id"],
+                result={
+                    "ok": True,
+                    "status": "succeeded",
+                    "terminal_status": "succeeded",
+                    "summary": {"factor_name": "Renderable Momentum"},
+                    "artifacts": {
+                        "status": "available",
+                        "images": [
+                            {
+                                "name": "default_group_return_plot.png",
+                                "kind": "image",
+                                "status": "available",
+                                "path": str(image_path),
+                            }
+                        ],
+                    },
+                },
+                metadata={"factor_name": "Renderable Momentum", "factor_type": "renderable_momentum"},
+                home=home,
+            )
+
+            response = mcp_server.handle_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 7,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "factor_mining_batch_test_batch_results",
+                        "arguments": {"batch_id": batch_id, "home": str(home)},
+                    },
+                }
+            )
+            content = response["result"]["content"]
+            text_blocks = [item for item in content if item.get("type") == "text"]
+            image_blocks = [item for item in content if item.get("type") == "image"]
+            assert image_blocks, content
+            assert image_blocks[0]["mimeType"] == "image/png"
+            assert image_blocks[0]["data"]
+            rendered_text = "\n".join(block["text"] for block in text_blocks)
+            assert str(home) not in rendered_text
+            assert "default_group_return_plot.png" in rendered_text
+    finally:
+        mcp_server.ApiClient = original_client
+
+
+def test_mcp_hidden_images_render_without_leaking_paths() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        home = Path(temp)
+        image_path = home / "default_cs_nav_curves.png"
+        image_path.write_bytes(b"\x89PNG\r\n\x1a\nhidden-image")
+        result = mcp_server._mcp_tool_result(
+            {
+                "ok": True,
+                "image_artifacts": ["default_cs_nav_curves.png"],
+                "_mcp_images": [
+                    {
+                        "name": "default_cs_nav_curves.png",
+                        "kind": "image",
+                        "status": "available",
+                        "path": str(image_path),
+                    }
+                ],
+            }
+        )
+        content = result["content"]
+        text = "\n".join(item["text"] for item in content if item.get("type") == "text")
+        images = [item for item in content if item.get("type") == "image"]
+        assert images, content
+        assert images[0]["mimeType"] == "image/png"
+        assert images[0]["data"]
+        assert str(home) not in text
+        assert "_mcp_images" not in text
+        assert "default_cs_nav_curves.png" in text
+
+
 def main() -> int:
     test_tools_and_existing_schema()
     test_status_without_config_returns_setup_required()
@@ -629,6 +730,8 @@ def main() -> int:
     test_batch_attempts_preserve_single_run_result_summary()
     test_run_wait_fetches_factor_card_and_default_backtest_images()
     test_batch_results_include_factor_card_images_and_comparison_rows()
+    test_batch_results_mcp_response_embeds_images_without_leaking_paths()
+    test_mcp_hidden_images_render_without_leaking_paths()
     print("batch MCP validation passed")
     return 0
 

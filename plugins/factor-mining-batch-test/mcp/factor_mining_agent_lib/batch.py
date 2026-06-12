@@ -293,6 +293,7 @@ def record_attempt_result(
             "formula_fingerprint": _fingerprint_metadata(metadata),
             "metrics": _sanitize_public_value(metrics, state=state),
             "result": public_result,
+            "display_images": _private_display_images(result),
             "error": None,
             "completed_at": _now(),
         }
@@ -517,6 +518,34 @@ def _public_attempt_summary(state: Mapping[str, Any], attempt: Mapping[str, Any]
     if attempt.get("error"):
         summary["error"] = _sanitize_error(str(attempt["error"]), state=state)
     return summary
+
+
+def _private_display_images(result: Mapping[str, Any]) -> list[dict[str, Any]]:
+    artifacts = result.get("artifacts")
+    if not isinstance(artifacts, Mapping):
+        return []
+    images = artifacts.get("images")
+    if not isinstance(images, list):
+        return []
+    private_images: list[dict[str, Any]] = []
+    for image in images:
+        if not isinstance(image, Mapping):
+            continue
+        name = image.get("name")
+        path = image.get("path")
+        if not isinstance(name, str) or not isinstance(path, str):
+            continue
+        item = {
+            "name": name,
+            "path": path,
+            "kind": "image",
+            "status": str(image.get("status") or "available"),
+        }
+        content_type = image.get("content_type")
+        if isinstance(content_type, str):
+            item["content_type"] = content_type
+        private_images.append(item)
+    return private_images
 
 
 def _public_result_summary(result: Mapping[str, Any], *, state: Mapping[str, Any]) -> dict[str, Any]:
