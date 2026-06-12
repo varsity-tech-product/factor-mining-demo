@@ -15,6 +15,7 @@ MCP_ROOT = ROOT / "plugins" / "factor-mining-batch-test" / "mcp"
 sys.path.insert(0, str(MCP_ROOT))
 
 import server as mcp_server
+from factor_mining_agent_lib.batch import record_attempt_result
 from factor_mining_agent_lib.config import AgentConfig, save_config
 
 
@@ -57,6 +58,7 @@ GENERIC_UPLOAD_PROPERTIES = {
     "output_dir",
     "home",
 }
+SUBMISSION_POSITION_MODES = ["sigmoid_continuous", "quantile_discrete", "both"]
 TASK_PAYLOAD = {
     "task_id": "validation-custom-task",
     "title": "Validation factor idea",
@@ -156,6 +158,10 @@ def test_tools_and_existing_schema() -> None:
     schema = _tool_schema("factor_mining_batch_test_upload_backtest_wait")
     assert schema["required"] == ["session_id", "plugin_path"]
     assert set(schema["properties"]) == GENERIC_UPLOAD_PROPERTIES
+    assert schema["properties"]["position_mode"]["enum"] == SUBMISSION_POSITION_MODES
+
+    batch_schema = _tool_schema("factor_mining_batch_test_batch_start")
+    assert batch_schema["properties"]["position_mode"]["enum"] == SUBMISSION_POSITION_MODES
 
 
 def test_status_without_config_returns_setup_required() -> None:
@@ -195,6 +201,30 @@ def test_batch_skill_public_task_flow_lists_tasks_before_start() -> None:
     list_index = public_section.index("factor_mining_batch_test_list_public_tasks")
     start_index = public_section.index("factor_mining_batch_test_batch_start")
     assert list_index < start_index
+
+
+def test_batch_start_normalizes_backend_cs_only_output_to_submission_default() -> None:
+    original_client = mcp_server.ApiClient
+    mcp_server.ApiClient = FakeApiClient
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            _save_validation_config(home)
+            start = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_start",
+                {
+                    "count": 1,
+                    "mode": "custom_idea",
+                    "idea": "Validate backend output mode normalization.",
+                    "task_payload": TASK_PAYLOAD,
+                    "position_mode": "cs_only",
+                    "home": str(home),
+                },
+            )
+            batch = _read_batch(home, start["batch_id"])
+            assert batch["position_mode"] == "both"
+    finally:
+        mcp_server.ApiClient = original_client
 
 
 def test_batch_isolation_and_sanitization() -> None:
@@ -354,13 +384,104 @@ def test_batch_upload_network_failure_blocks_without_failed_attempt_or_advancing
         mcp_server.ApiClient = original_client
 
 
+def test_batch_attempts_preserve_single_run_result_summary() -> None:
+    original_client = mcp_server.ApiClient
+    mcp_server.ApiClient = FakeApiClient
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            _save_validation_config(home)
+            start = mcp_server.call_tool(
+                "factor_mining_batch_test_batch_start",
+                {
+                    "count": 1,
+                    "mode": "custom_idea",
+                    "idea": "Validate result summary preservation.",
+                    "task_payload": TASK_PAYLOAD,
+                    "home": str(home),
+                },
+            )
+            batch_id = start["batch_id"]
+            first = mcp_server.call_tool("factor_mining_batch_test_batch_next", {"batch_id": batch_id, "home": str(home)})
+            single_result = {
+                "ok": True,
+                "status": "succeeded",
+                "terminal_status": "succeeded",
+                "client_run_id": first["client_run_id"],
+                "session_id": "session-secret",
+                "plugin_id": "plugin-secret",
+                "job_ids": ["job-secret"],
+                "jobs": [
+                    {
+                        "job_id": "job-secret",
+                        "id": "job-secret",
+                        "status": "done",
+                        "position_mode": "cs_only",
+                        "failure_diagnostics": "",
+                    }
+                ],
+                "artifact": {
+                    "status": "available",
+                    "name": "default_factor_card.json",
+                    "path": str(home / "attempts" / "001" / "artifacts" / "default_factor_card.json"),
+                },
+                "summary": {
+                    "factor_name": "Validation Result Momentum",
+                    "metrics": {
+                        "rank_ic": 0.031,
+                        "rank_icir": 0.42,
+                        "composite_sharpe": 1.7,
+                    },
+                    "jobs": [
+                        {
+                            "job_id": "job-secret",
+                            "status": "done",
+                            "position_mode": "cs_only",
+                        }
+                    ],
+                    "fish": {"level": "A"},
+                },
+            }
+
+            attempt_result = record_attempt_result(
+                batch_id=batch_id,
+                attempt_id=first["attempt_id"],
+                result=single_result,
+                metadata={"factor_name": "Validation Result Momentum", "factor_type": "validation_result_momentum"},
+                home=home,
+            )
+            results = mcp_server.call_tool("factor_mining_batch_test_batch_results", {"batch_id": batch_id, "home": str(home)})
+
+            for payload in (attempt_result, results["attempts"][0]):
+                assert payload["status"] == "succeeded"
+                assert payload["result"]["status"] == "succeeded"
+                assert payload["result"]["terminal_status"] == "succeeded"
+                assert payload["result"]["summary"]["metrics"]["rank_ic"] == 0.031
+                assert payload["result"]["summary"]["metrics"]["rank_icir"] == 0.42
+                assert payload["result"]["summary"]["metrics"]["composite_sharpe"] == 1.7
+                assert payload["result"]["summary"]["fish"]["level"] == "A"
+                assert payload["result"]["artifact"]["status"] == "available"
+                assert payload["result"]["jobs"][0]["status"] == "done"
+                assert payload["result"]["jobs"][0]["position_mode"] == "cs_only"
+
+            rendered = json.dumps(results, sort_keys=True)
+            assert "job-secret" not in rendered
+            assert "plugin-secret" not in rendered
+            assert "session-secret" not in rendered
+            assert str(home) not in rendered
+    finally:
+        mcp_server.ApiClient = original_client
+
+
 def main() -> int:
     test_tools_and_existing_schema()
     test_status_without_config_returns_setup_required()
     test_public_task_batch_start_requires_task_id_helpfully()
     test_batch_skill_public_task_flow_lists_tasks_before_start()
+    test_batch_start_normalizes_backend_cs_only_output_to_submission_default()
     test_batch_isolation_and_sanitization()
     test_batch_upload_network_failure_blocks_without_failed_attempt_or_advancing()
+    test_batch_attempts_preserve_single_run_result_summary()
     print("batch MCP validation passed")
     return 0
 

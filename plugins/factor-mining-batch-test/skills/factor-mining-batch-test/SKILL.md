@@ -65,6 +65,10 @@ Write or locate one `plugin.py`, then call
 import or execute generated code. When the metadata is valid and the user is
 ready to submit, call `factor_mining_batch_test_upload_backtest_wait`. Use
 `fwd_period=7` when neither the task nor user specifies a horizon.
+Use `position_mode="both"` unless the user explicitly asks for
+`sigmoid_continuous` or `quantile_discrete`. Never submit `position_mode="cs_only"`;
+that value can appear in returned jobs when the backend is running a CS-only
+runtime, but it is not a valid request value.
 
 After upload, inspect the returned `ok`, `status`, `terminal_status`,
 `failures`, sanitized job statuses, artifact availability, and factor-card

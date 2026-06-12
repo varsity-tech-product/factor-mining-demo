@@ -19,7 +19,13 @@ MCP_ROOT = Path(__file__).resolve().parent
 if str(MCP_ROOT) not in sys.path:
     sys.path.insert(0, str(MCP_ROOT))
 
-from factor_mining_agent_lib.api import AgentStatusError, ApiClient, ApiError
+from factor_mining_agent_lib.api import (
+    SUBMISSION_POSITION_MODES,
+    AgentStatusError,
+    ApiClient,
+    ApiError,
+    normalize_submission_position_mode,
+)
 from factor_mining_agent_lib.batch import (
     BatchError,
     batch_results,
@@ -50,7 +56,7 @@ from factor_mining_agent_lib.workflow import is_workflow_terminal, summarize_fac
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "fmbt"
-SERVER_VERSION = "0.2.4"
+SERVER_VERSION = "0.2.5"
 MISSING_CREDENTIAL_MESSAGE = (
     "Factor Mining Batch Test setup is required. Call factor_mining_batch_test_setup_browser and enter the vt_ Agent API Key "
     "in the local browser page, not in chat."
@@ -276,7 +282,7 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                 "plugin_path": {"type": "string"},
                 "client_run_id": {"type": "string"},
                 "parent_client_run_id": {"type": "string"},
-                "position_mode": {"type": "string"},
+                "position_mode": {"type": "string", "enum": list(SUBMISSION_POSITION_MODES)},
                 "fwd_period": {"type": "integer"},
                 "decision_summary": {"type": "string"},
                 "wait": {"type": "boolean"},
@@ -361,7 +367,7 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                 "idea": {"type": "string"},
                 "task_payload": {"type": "object"},
                 "fwd_period": {"type": "integer"},
-                "position_mode": {"type": "string"},
+                "position_mode": {"type": "string", "enum": list(SUBMISSION_POSITION_MODES)},
                 "diversity_goal": {"type": "string"},
                 "home": {"type": "string"},
             },
@@ -663,7 +669,7 @@ def _upload_backtest_wait(args: Mapping[str, Any], *, opener: Any, env: Mapping[
     backtest_response = client.submit_backtest(
         session_id,
         plugin_id,
-        position_mode=str(args.get("position_mode") or "both"),
+        position_mode=_submission_position_mode(args.get("position_mode")),
         client_run_id=client_run_id,
     )
     state = RunState(
@@ -781,7 +787,7 @@ def _batch_start(args: Mapping[str, Any], *, opener: Any, env: Mapping[str, str]
         idea=_optional_string(args, "idea"),
         task_payload=task_payload,
         fwd_period=int(args.get("fwd_period") or 7),
-        position_mode=str(args.get("position_mode") or "both"),
+        position_mode=_submission_position_mode(args.get("position_mode")),
         diversity_goal=_optional_string(args, "diversity_goal"),
         home=_configured_home(args, env),
     )
@@ -1110,6 +1116,13 @@ def _optional_string(args: Mapping[str, Any], key: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ToolInputError(f"{key} must be a non-empty string when provided")
     return value.strip()
+
+
+def _submission_position_mode(value: Any) -> str:
+    try:
+        return normalize_submission_position_mode(value)
+    except ValueError as exc:
+        raise ToolInputError(str(exc)) from exc
 
 
 def _redact_payload(value: Any) -> Any:

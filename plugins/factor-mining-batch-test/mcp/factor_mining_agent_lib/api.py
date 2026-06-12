@@ -12,6 +12,7 @@ from .redaction import redact_text
 
 
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+SUBMISSION_POSITION_MODES = ("sigmoid_continuous", "quantile_discrete", "both")
 
 
 class ApiError(RuntimeError):
@@ -50,6 +51,16 @@ class ApiError(RuntimeError):
 
 class AgentStatusError(ApiError):
     pass
+
+
+def normalize_submission_position_mode(value: Any) -> str:
+    mode = str(value or "both").strip() or "both"
+    if mode == "cs_only":
+        return "both"
+    if mode not in SUBMISSION_POSITION_MODES:
+        allowed = ", ".join(SUBMISSION_POSITION_MODES)
+        raise ValueError(f"position_mode must be one of: {allowed}")
+    return mode
 
 
 class NoRedirectHandler(request.HTTPRedirectHandler):
@@ -437,6 +448,7 @@ class ApiClient:
         params_override: Mapping[str, Any] | None = None,
         client_run_id: str | None = None,
     ) -> Any:
+        position_mode = normalize_submission_position_mode(position_mode)
         return self.request(
             "POST",
             f"/sessions/{parse.quote(session_id, safe='')}/plugins/{parse.quote(plugin_id, safe='')}/backtest",

@@ -44,5 +44,10 @@ its own local state and artifact area, `factor_mining_batch_test_batch_next` ret
 only the current attempt packet, and final summaries are sanitized through
 `factor_mining_batch_test_batch_results`.
 
+Each completed batch attempt returns a sanitized single-run result summary with
+factor-card metrics, artifact status, fish metadata when present, and sanitized
+failure details. Batch mode adds attempt isolation; it should not hide the
+backtest result that a single-factor run would return.
+
 Batch mode provides MCP state, file, and information-flow isolation between
 attempts. It does not guarantee host-level isolated model context.

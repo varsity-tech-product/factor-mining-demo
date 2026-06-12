@@ -140,6 +140,11 @@ current attempt packet, and the batch skill instructs the agent not to inspect
 sibling attempt directories. Setup, auth, network, backend, and config errors
 block or retry the current attempt instead of silently advancing.
 
+Each completed batch attempt returns the same kind of sanitized result summary as
+a single-factor run, including status, factor-card metrics, artifact status, and
+failure details when available. Batch mode only adds local state and context
+isolation between attempts.
+
 ## Local State
 
 Configuration is stored under `~/.factor-mining-batch-test/`. Run state is

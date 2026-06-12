@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from .api import normalize_submission_position_mode
 from .config import ensure_agent_home
 from .redaction import redact_text
 
@@ -51,6 +52,21 @@ RANK_METRICS = (
     "mean_return",
     "ic",
 )
+RESULT_TOP_LEVEL_KEYS = ("ok", "status", "terminal_status")
+SUMMARY_TEXT_KEYS = ("factor_name", "factor_type", "artifact_status")
+JOB_PUBLIC_KEYS = (
+    "status",
+    "position_mode",
+    "progress",
+    "failed_step",
+    "failure_diagnostics",
+    "requested_fwd_period",
+    "actual_fwd_period",
+    "error",
+    "reason",
+    "message",
+)
+ARTIFACT_PUBLIC_KEYS = ("status", "name", "content_type", "size_bytes", "sha256")
 FAMILY_KEYWORDS = (
     ("mean_reversion", ("mean_reversion", "mean reversion", "reversal", "contrarian", "zscore", "z-score")),
     ("momentum", ("momentum", "trend", "breakout", "relative_strength")),
@@ -94,7 +110,10 @@ def create_batch(
     count = _validate_count(count)
     mode = _validate_mode(mode)
     fwd_period = int(fwd_period or 7)
-    position_mode = str(position_mode or "both").strip() or "both"
+    try:
+        position_mode = normalize_submission_position_mode(position_mode)
+    except ValueError as exc:
+        raise BatchError(str(exc)) from exc
     task_id = _clean_optional_string(task_id)
     idea = _clean_optional_string(idea)
     diversity_goal = _clean_optional_string(diversity_goal)
@@ -228,6 +247,10 @@ def prepare_attempt_upload(
     state["current_attempt_index"] = attempt["index"]
     state["updated_at"] = now
     save_batch_state(state, home=home)
+    try:
+        prepared_position_mode = normalize_submission_position_mode(state.get("position_mode"))
+    except ValueError as exc:
+        raise BatchError(str(exc)) from exc
     return PreparedAttempt(
         batch_id=state["batch_id"],
         attempt_id=str(attempt["attempt_id"]),
@@ -235,7 +258,7 @@ def prepare_attempt_upload(
         plugin_path=resolved_plugin,
         output_dir=output_dir,
         fwd_period=int(state.get("fwd_period") or 7),
-        position_mode=str(state.get("position_mode") or "both"),
+        position_mode=prepared_position_mode,
     )
 
 
@@ -251,9 +274,13 @@ def record_attempt_result(
     attempt = _find_attempt(state, attempt_id)
     _clear_system_error(state)
     summary = result.get("summary") if isinstance(result.get("summary"), Mapping) else {}
+    public_result = _public_result_summary(result, state=state)
+    public_summary = public_result.get("summary") if isinstance(public_result.get("summary"), Mapping) else {}
     status = _attempt_status_from_result(result)
-    metrics = summary.get("metrics") if isinstance(summary.get("metrics"), Mapping) else {}
-    factor_name = _clean_optional_string(summary.get("factor_name")) or _clean_optional_string(metadata.get("factor_name"))
+    metrics = public_summary.get("metrics") if isinstance(public_summary.get("metrics"), Mapping) else {}
+    factor_name = _clean_optional_string(public_summary.get("factor_name")) or _clean_optional_string(
+        summary.get("factor_name")
+    ) or _clean_optional_string(metadata.get("factor_name"))
     factor_type = _clean_optional_string(metadata.get("factor_type"))
     family = _derive_factor_family(factor_type=factor_type, factor_name=factor_name)
 
@@ -265,6 +292,7 @@ def record_attempt_result(
             "factor_family": family,
             "formula_fingerprint": _fingerprint_metadata(metadata),
             "metrics": _sanitize_public_value(metrics, state=state),
+            "result": public_result,
             "error": None,
             "completed_at": _now(),
         }
@@ -482,9 +510,117 @@ def _public_attempt_summary(state: Mapping[str, Any], attempt: Mapping[str, Any]
     metrics = _sanitize_public_value(attempt.get("metrics") or {}, state=state)
     if metrics:
         summary["metrics"] = metrics
+    result = _sanitize_public_value(attempt.get("result") or {}, state=state)
+    if result:
+        summary["result"] = result
     if attempt.get("error"):
         summary["error"] = _sanitize_error(str(attempt["error"]), state=state)
     return summary
+
+
+def _public_result_summary(result: Mapping[str, Any], *, state: Mapping[str, Any]) -> dict[str, Any]:
+    public: dict[str, Any] = {}
+    for key in RESULT_TOP_LEVEL_KEYS:
+        if key in result:
+            value = _sanitize_public_value(result.get(key), state=state)
+            if value not in (None, "", [], {}):
+                public[key] = value
+
+    summary = result.get("summary")
+    if isinstance(summary, Mapping):
+        public_summary = _public_factor_summary(summary, state=state)
+        if public_summary:
+            public["summary"] = public_summary
+
+    jobs = result.get("jobs")
+    if isinstance(jobs, list):
+        public_jobs = [
+            item
+            for item in (_public_job_summary(job, state=state) for job in jobs if isinstance(job, Mapping))
+            if item
+        ]
+        if public_jobs:
+            public["jobs"] = public_jobs
+
+    artifact = result.get("artifact")
+    if isinstance(artifact, Mapping):
+        public_artifact = _public_artifact_summary(artifact, state=state)
+        if public_artifact:
+            public["artifact"] = public_artifact
+
+    return public
+
+
+def _public_factor_summary(summary: Mapping[str, Any], *, state: Mapping[str, Any]) -> dict[str, Any]:
+    public: dict[str, Any] = {}
+    for key in SUMMARY_TEXT_KEYS:
+        if summary.get(key):
+            public[key] = _sanitize_text(str(summary[key]), state=state)
+
+    metrics = _sanitize_public_value(summary.get("metrics") or {}, state=state)
+    if metrics:
+        public["metrics"] = metrics
+
+    artifacts = _sanitize_public_value(summary.get("artifacts") or {}, state=state)
+    if artifacts:
+        public["artifacts"] = artifacts
+
+    fish = _sanitize_public_value(summary.get("fish") or {}, state=state)
+    if fish:
+        public["fish"] = fish
+
+    artifact_errors = _sanitize_public_value(summary.get("artifact_errors") or [], state=state)
+    if artifact_errors:
+        public["artifact_errors"] = artifact_errors
+
+    jobs = summary.get("jobs")
+    if isinstance(jobs, list):
+        public_jobs = [
+            item
+            for item in (_public_job_summary(job, state=state) for job in jobs if isinstance(job, Mapping))
+            if item
+        ]
+        if public_jobs:
+            public["jobs"] = public_jobs
+
+    failures = summary.get("failures")
+    if isinstance(failures, list):
+        public_failures = [
+            item
+            for item in (_public_job_summary(job, state=state) for job in failures if isinstance(job, Mapping))
+            if item
+        ]
+        if public_failures:
+            public["failures"] = public_failures
+
+    return public
+
+
+def _public_job_summary(job: Mapping[str, Any], *, state: Mapping[str, Any]) -> dict[str, Any]:
+    public: dict[str, Any] = {}
+    for key in JOB_PUBLIC_KEYS:
+        if key not in job:
+            continue
+        value = _sanitize_public_value(job.get(key), state=state)
+        if value not in (None, "", [], {}):
+            public[key] = value
+    summary = job.get("summary")
+    if isinstance(summary, Mapping):
+        clean_summary = _sanitize_public_value(summary, state=state)
+        if clean_summary:
+            public["summary"] = clean_summary
+    return public
+
+
+def _public_artifact_summary(artifact: Mapping[str, Any], *, state: Mapping[str, Any]) -> dict[str, Any]:
+    public: dict[str, Any] = {}
+    for key in ARTIFACT_PUBLIC_KEYS:
+        if key not in artifact:
+            continue
+        value = _sanitize_public_value(artifact.get(key), state=state)
+        if value not in (None, "", [], {}):
+            public[key] = value
+    return public
 
 
 def _best_attempts(attempts: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
