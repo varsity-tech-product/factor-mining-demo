@@ -1,9 +1,13 @@
-# Factor Mining Batch Test
+# Quandora Plugins
 
-Factor Mining Batch Test is a downloadable local-MCP batch test build for Codex,
-Codex Desktop, Claude Code, and OpenClaw. It supports the currently working
-single-factor workflow and adds serial batch factor mining in the same bundled
-plugin package.
+This repository is the public Quandora plugin marketplace for local-agent
+platforms. It is intended to carry multiple Quandora plugins over time, with
+Factor Mining as the first supported service.
+
+The current branch contains the Factor Mining Batch Test package, a downloadable
+local-MCP batch test build for Codex, Codex Desktop, Claude Code, and OpenClaw.
+It supports the currently working single-factor workflow and adds serial batch
+factor mining in the same bundled plugin package.
 
 This is not the final remote-MCP production package. Remote MCP production
 packaging will come later.
@@ -39,16 +43,16 @@ Key entry happens through the local browser setup page returned by
 Install from the batch-test branch:
 
 ```bash
-codex plugin marketplace add varsity-tech-product/factor-mining-agent-plugins --ref feat/batch-test-local-mcp
-codex plugin add factor-mining-batch-test@factor-mining-batch-test-marketplace
+codex plugin marketplace add varsity-tech-product/quandora-plugins --ref feat/batch-test-local-mcp
+codex plugin add factor-mining-batch-test@quandora
 ```
 
 Update an existing installation:
 
 ```bash
-codex plugin marketplace upgrade factor-mining-batch-test-marketplace
-codex plugin remove factor-mining-batch-test@factor-mining-batch-test-marketplace
-codex plugin add factor-mining-batch-test@factor-mining-batch-test-marketplace
+codex plugin marketplace upgrade quandora
+codex plugin remove factor-mining-batch-test@quandora
+codex plugin add factor-mining-batch-test@quandora
 ```
 
 ## Codex Desktop
@@ -56,9 +60,9 @@ codex plugin add factor-mining-batch-test@factor-mining-batch-test-marketplace
 Add the marketplace in Codex Desktop with these fields:
 
 ```text
-Source: varsity-tech-product/factor-mining-agent-plugins
+Source: varsity-tech-product/quandora-plugins
 Git ref: feat/batch-test-local-mcp
-Plugin: factor-mining-batch-test@factor-mining-batch-test-marketplace
+Plugin: factor-mining-batch-test@quandora
 ```
 
 After updating, fully quit and reopen Codex Desktop, then start a new chat. If
@@ -71,16 +75,16 @@ manifests to add a machine-specific Python path.
 Install from the batch-test branch:
 
 ```bash
-claude plugin marketplace add varsity-tech-product/factor-mining-agent-plugins@feat/batch-test-local-mcp
-claude plugin install factor-mining-batch-test@factor-mining-batch-test-marketplace
+claude plugin marketplace add varsity-tech-product/quandora-plugins@feat/batch-test-local-mcp
+claude plugin install factor-mining-batch-test@quandora
 claude plugin validate plugins/factor-mining-batch-test
 ```
 
 Update an existing installation:
 
 ```bash
-claude plugin marketplace update factor-mining-batch-test-marketplace
-claude plugin update factor-mining-batch-test@factor-mining-batch-test-marketplace
+claude plugin marketplace update quandora
+claude plugin update factor-mining-batch-test@quandora
 claude mcp list
 ```
 
@@ -94,13 +98,13 @@ time, verifies tool visibility, and restarts services when needed.
 Recommended install or update:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/factor-mining-agent-plugins/feat/batch-test-local-mcp/install-openclaw.sh | bash
+curl -fsSL https://raw.githubusercontent.com/varsity-tech-product/quandora-plugins/feat/batch-test-local-mcp/install-openclaw.sh | bash
 ```
 
 Manual install:
 
 ```bash
-openclaw plugins install factor-mining-batch-test --marketplace https://github.com/varsity-tech-product/factor-mining-agent-plugins.git#feat/batch-test-local-mcp --force
+openclaw plugins install factor-mining-batch-test --marketplace https://github.com/varsity-tech-product/quandora-plugins.git#feat/batch-test-local-mcp --force
 PLUGIN_ROOT="$(openclaw plugins inspect factor-mining-batch-test --json --runtime | python3 -c 'import json,sys; p=json.load(sys.stdin); print((p.get("plugin") or {}).get("rootDir") or (p.get("plugin") or {}).get("source"))')"
 openclaw mcp set fmbt "{\"command\":\"$(command -v python3)\",\"cwd\":\"${PLUGIN_ROOT}\",\"args\":[\"./mcp/launch.py\"]}"
 openclaw gateway restart

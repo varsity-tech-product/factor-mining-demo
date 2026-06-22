@@ -1,10 +1,10 @@
 {
-  "name": "factor-mining-batch-test-marketplace",
+  "name": "quandora",
   "owner": {
     "name": "Varsity Tech Product",
     "url": "https://github.com/varsity-tech-product"
   },
-  "description": "Factor Mining Batch Test plugins for local-agent workflows.",
+  "description": "Quandora plugins for local-agent workflows.",
   "version": "0.1.0",
   "plugins": [
     {

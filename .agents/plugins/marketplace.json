@@ -1,7 +1,7 @@
 {
-  "name": "factor-mining-batch-test-marketplace",
+  "name": "quandora",
   "interface": {
-    "displayName": "Factor Mining Batch Test"
+    "displayName": "Quandora Plugins"
   },
   "plugins": [
     {
